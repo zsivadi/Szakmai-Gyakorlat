@@ -1,4 +1,5 @@
 SQL → LINQ fordító
+
 A projekt célja
 
 A projekt célja egy olyan fordító (transpiler) készítése, amely SQL lekérdezéseket képes automatikusan C# LINQ kifejezésekké alakítani. A fejlesztés elsődleges célja a megvalósíthatóság vizsgálata, a lehetséges megoldások feltérképezése, valamint egy működő prototípus elkészítése.
@@ -39,3 +40,8 @@ Tervezett fejlesztési lépések
 - LINQ kódgenerálás Roslyn segítségével.
 - Tesztesetek készítése és a fordítás helyességének ellenőrzése.
 - A megoldás korlátainak dokumentálása és értékelése.
+
+
+Munkaidő nyílvántartás
+
+https://docs.google.com/spreadsheets/d/1PGyCA7rX0jJ6ZRKQ_9c8zLb1XFkHqzliBGZACF3ObDk/edit?usp=sharing
