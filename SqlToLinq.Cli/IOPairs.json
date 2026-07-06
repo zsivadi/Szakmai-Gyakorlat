@@ -1,0 +1,134 @@
+[
+	{
+		"Id": 1,
+		"Desc": "Lekérdezés oszlopkiválasztás nélkül.",
+		"SqlInput": "SELECT * FROM Users;",
+		"ExpectedLinq": "db.Users.ToList();"
+	},
+	{
+		"Id": 2,
+		"Desc": "Lekérdezés oszlopkiválasztással.",
+		"SqlInput": "SELECT Id FROM Users;",
+		"ExpectedLinq": "db.Users.Select(x => new {x.Id}).ToList();"
+	},
+	{
+		"Id": 3,
+		"Desc": "Két oszlop vesszővel elválasztva.",
+		"SqlInput": "SELECT Id, Name FROM Users;",
+		"ExpectedLinq": "db.Users.Select(x => new {x.Id, x.Name}).ToList();"
+	},
+	{
+		"Id": 4,
+		"Desc": "Három oszlop több vesszővel elválasztva.",
+		"SqlInput": "SELECT Id, Name, Age FROM Users;",
+		"ExpectedLinq": "db.Users.Select(x => new {x.Id, x.Name, x.Age}).ToList();"
+	},
+	{
+		"Id": 5,
+		"Desc": "Nagyobb mint feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age > 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).ToList();"
+	},
+	{
+		"Id": 6,
+		"Desc": "Kisebb mint feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age < 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age < 18).ToList();"
+	},
+	{
+		"Id": 7,
+		"Desc": "Nagyobb vagy egyenlő feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age >= 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 18).ToList();"
+	},
+	{
+		"Id": 8,
+		"Desc": "Kisebb vagy egyenlő feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age <= 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age <= 18).ToList();"
+	},
+	{
+		"Id": 9,
+		"Desc": "Egyenlő feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age = 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age == 18).ToList();"
+	},
+	{
+		"Id": 10,
+		"Desc": "Nem egyenlő feltétel.",
+		"SqlInput": "SELECT * FROM Users WHERE Age <> 18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age != 18).ToList();"
+	},
+	{
+		"Id": 11,
+		"Desc": "Szöveges egyenlőség.",
+		"SqlInput": "SELECT * FROM Users WHERE Name = 'Admin';",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Admin\").ToList();"
+	},
+	{
+		"Id": 12,
+		"Desc": "Szöveges nem egyenlő.",
+		"SqlInput": "SELECT * FROM Users WHERE Role <> 'Guest';",
+		"ExpectedLinq": "db.Users.Where(x => x.Role != \"Guest\").ToList();"
+	},
+	{
+		"Id": 13,
+		"Desc": "Két oszlop összehasonltása.",
+		"SqlInput": "SELECT * FROM Users WHERE Points > Bonus;",
+		"ExpectedLinq": "db.Users.Where(x => x.Points > x.Bonus).ToList();"
+	},
+	{
+		"Id": 14,
+		"Desc": "AND operátor átalaktása.",
+		"SqlInput": "SELECT * FROM Users WHERE Age >= 18 AND Role = 'Admin';",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 18 && x.Role == \"Admin\").ToList();"
+	},
+	{
+		"Id": 15,
+		"Desc": "OR operátor átalaktása.",
+		"SqlInput": "SELECT * FROM Users WHERE Age >= 18 OR Role = 'Admin'",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 18 || x.Role == \"Admin\").ToList();"
+	},
+	{
+		"Id": 16,
+		"Desc": "Zárójelkezelés.",
+		"SqlInput": "SELECT * FROM Users WHERE (Points > 100 OR Bonus > 50) AND Age < 30;",
+		"ExpectedLinq": "db.Users.Where(x => (x.Points > 100 || x.Bonus > 50) && x.Age < 30).ToList();"
+	},
+	{
+		"Id": 17,
+		"Desc": "Matematikai kifejezések.",
+		"SqlInput": "SELECT * FROM Users WHERE Points + Bonus >= 150;",
+		"ExpectedLinq": "db.Users.Where(x => x.Points + x.Bonus >= 150).ToList();"
+	},
+	{
+		"Id": 18,
+		"Desc": "Kisbetű érzékenység.",
+		"SqlInput": "select * from users;",
+		"ExpectedLinq": "db.Users.ToList();"
+	},
+	{
+		"Id": 19,
+		"Desc": "Többszörös szóközök.",
+		"SqlInput": "SELECT  *  FROM  Users;",
+		"ExpectedLinq": "db.Users.ToList();"
+	},
+	{
+		"Id": 20,
+		"Desc": "Szóközök hiánya az operátorok és vesszők körül.",
+		"SqlInput": "SELECT Name,Age FROM Users WHERE Age>18;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).Select(x => new { x.Name, x.Age }).ToList();"
+	},
+	{
+		"Id": 21,
+		"Desc": "Szóközök a szövegen belül.",
+		"SqlInput": "SELECT * FROM Users WHERE Name = 'Nagy Peti';",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Nagy Peti\").ToList();"
+	},
+	{
+		"Id": 22,
+		"Desc": "Oszlopvélasztás láncolása.",
+		"SqlInput": "SELECT Name FROM Users WHERE Age >= 21;",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { x.Name }).ToList();"
+	}
+]
