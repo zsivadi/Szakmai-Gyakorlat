@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Linq;
+using Antlr4.Runtime;
 
 namespace SqlToLinq.Cli {
 
@@ -53,10 +55,26 @@ namespace SqlToLinq.Cli {
                 for (int i = 0; i < testCases.Count; i++) {
 
                     Console.WriteLine($"#{testCases[i].Id} - {testCases[i].Desc}");
-                    Console.WriteLine($"SQL:  {testCases[i].SqlInput}");
-                    Console.WriteLine($"LINQ: {testCases[i].ExpectedLinq}\n");
+                    Console.WriteLine($"SQL:        {testCases[i].SqlInput}");
+                    Console.WriteLine($"LINQ:       {testCases[i].ExpectedLinq}\n");
+                    
                 }
             }
+
+            string sql = "SELECT Name,Age FROM Users WHERE Age>18;";
+
+            var inputStream = new AntlrInputStream(sql);
+            var lexer = new SqlParserLexer(inputStream);
+            var tokenStream = new CommonTokenStream(lexer);
+
+            var parser = new SqlParserParser(tokenStream);
+
+            var tree = parser.query();
+
+            string treeText = tree.ToStringTree(parser).Replace('(', '[').Replace(')', ']').Replace("<EOF>", "");
+            Console.WriteLine(treeText);
+
+            Console.ReadLine();
 
         }
     }

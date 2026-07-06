@@ -121,14 +121,15 @@
 	},
 	{
 		"Id": 21,
-		"Desc": "Szóközök a szövegen belül.",
-		"SqlInput": "SELECT * FROM Users WHERE Name = 'Nagy Peti';",
+		"Desc": "Szóközök a szövegen belül és sortörés.",
+		"SqlInput": "SELECT * FROM Users \nWHERE Name = 'Nagy Peti';",
 		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Nagy Peti\").ToList();"
 	},
 	{
 		"Id": 22,
-		"Desc": "Oszlopvélasztás láncolása.",
-		"SqlInput": "SELECT Name FROM Users WHERE Age >= 21;",
+		"Desc": "Oszlopválasztás láncolása és sortörés.",
+		"SqlInput": "SELECT Name FROM Users \nWHERE Age >= 21;",
 		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { x.Name }).ToList();"
-	}
+	},
+	
 ]
