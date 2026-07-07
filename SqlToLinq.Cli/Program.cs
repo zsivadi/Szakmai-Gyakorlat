@@ -1,9 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿
+using System;
 using System.IO;
-using System.Text.Json;
 using System.Linq;
 using Antlr4.Runtime;
+using System.Text.Json;
+using System.Collections.Generic;
 
 namespace SqlToLinq.Cli {
 
@@ -55,26 +56,39 @@ namespace SqlToLinq.Cli {
                 for (int i = 0; i < testCases.Count; i++) {
 
                     Console.WriteLine($"#{testCases[i].Id} - {testCases[i].Desc}");
-                    Console.WriteLine($"SQL:        {testCases[i].SqlInput}");
-                    Console.WriteLine($"LINQ:       {testCases[i].ExpectedLinq}\n");
-                    
+                    Console.WriteLine($"SQL: {testCases[i].SqlInput}");
+                    Console.WriteLine($"{"Expected LINQ:", -25} {testCases[i].ExpectedLinq}");
+
+                    try {
+
+                        var inputStream = new AntlrInputStream(testCases[i].SqlInput);
+                        var lexer = new SqlParserLexer(inputStream);
+                        var tokens = new CommonTokenStream(lexer);
+                        var parser = new SqlParserParser(tokens);
+
+                        var tree = parser.query();
+
+
+                        var visitor = new SqlVisitor();
+                        string generatedLinq = visitor.Visit(tree);
+
+                        Console.WriteLine($"{"Generated LINQ:", -25} {generatedLinq}\n\n");
+
+                    } catch (Exception ex) {
+
+                        Console.WriteLine($"[ERROR] Error during parsing: {ex.Message}");
+                    }
+
                 }
             }
 
-            string sql = "SELECT Name,Age FROM Users WHERE Age>18;";
+            //string treeText = tree.ToStringTree(parser).Replace('(', '[').Replace(')', ']').Replace("<EOF>", "");
+            //Console.WriteLine(treeText);
 
-            var inputStream = new AntlrInputStream(sql);
-            var lexer = new SqlParserLexer(inputStream);
-            var tokenStream = new CommonTokenStream(lexer);
+            //Console.ReadLine();
 
-            var parser = new SqlParserParser(tokenStream);
 
-            var tree = parser.query();
-
-            string treeText = tree.ToStringTree(parser).Replace('(', '[').Replace(')', ']').Replace("<EOF>", "");
-            Console.WriteLine(treeText);
-
-            Console.ReadLine();
+            DummyDatabase db = new DummyDatabase();
 
         }
     }
