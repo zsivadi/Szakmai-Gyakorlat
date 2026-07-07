@@ -18,12 +18,19 @@ namespace SqlToLinq.Cli {
             throw new NotSupportedException("[ERROR] This is not a SELECT!");
         }
 
+        private string ToPascalCase(string input) {
+
+            if (string.IsNullOrEmpty(input)) return input;
+
+            return char.ToUpper(input[0]) + input.Substring(1);
+        }
+
         public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
 
             // Table name
 
             var queryNode = new LinqQueryNode {
-                SourceTable = context.tableName().GetText()
+                SourceTable = ToPascalCase(context.tableName().GetText())
             };
 
             // WHERE
@@ -143,7 +150,8 @@ namespace SqlToLinq.Cli {
         // Expressions
 
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
-            return new LinqIdentifierNode { Name = $"x.{context.GetText()}" };
+            string rawColumnName = context.GetText();
+            return new LinqIdentifierNode { Name = $"x.{ToPascalCase(rawColumnName)}" };
         }
 
         public override LinqNode VisitNumberExpr([NotNull] SqlParserParser.NumberExprContext context) {
