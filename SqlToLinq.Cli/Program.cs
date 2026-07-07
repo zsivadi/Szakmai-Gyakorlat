@@ -70,7 +70,8 @@ namespace SqlToLinq.Cli {
 
 
                         var visitor = new SqlVisitor();
-                        string generatedLinq = visitor.Visit(tree);
+                        LinqNode linqAst = visitor.Visit(tree);
+                        string generatedLinq = linqAst.ToCodeString();
 
                         Console.WriteLine($"{"Generated LINQ:", -25} {generatedLinq}\n\n");
 
@@ -81,15 +82,6 @@ namespace SqlToLinq.Cli {
 
                 }
             }
-
-            //string treeText = tree.ToStringTree(parser).Replace('(', '[').Replace(')', ']').Replace("<EOF>", "");
-            //Console.WriteLine(treeText);
-
-            //Console.ReadLine();
-
-
-            DummyDatabase db = new DummyDatabase();
-
         }
     }
 }

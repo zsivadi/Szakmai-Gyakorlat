@@ -140,7 +140,7 @@
 	{
 		"Id": 24,
 		"Desc": "Több oszlop módosítása.",
-		"SqlInput": "UPDATE Users SET Points = 50, Bonus = 10 WHERE Id = 2",
+		"SqlInput": "UPDATE Users SET Points = 50, Bonus = 10 WHERE Id = 1",
 		"ExpectedLinq": "var u = db.Users.FirstOrDefault(x => x.Id == 1); \nu.Points = 50; \nu.Bonus = 10"
 	},
 	{
@@ -164,7 +164,7 @@
 	{
 		"Id": 28,
 		"Desc": "Feltétel nélküli módosítás.",
-		"SqlInput": "UPDATE Users SET Bonus = 0",
+		"SqlInput": "SELECT Name, Id, Role FROM Users \nWHERE (Name = 'Gábor' OR Name = 'Anna') \nAND (Score <= 15 OR Bonus = 10) OR Role <> 'Admin'",
 		"ExpectedLinq": "db.Users.ToList().ForEach(u => u.Bonus = 0)"
 	}
 ]

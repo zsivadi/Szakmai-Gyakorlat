@@ -1,142 +1,157 @@
-using Antlr4.Runtime.Misc;
-using Antlr4.Runtime;
 using System;
-using System.Net.ServerSentEvents;
+using System.Collections.Generic;
+using System.Linq;
+using Antlr4.Runtime.Misc;
 
 namespace SqlToLinq.Cli {
 
-    public class SqlVisitor : SqlParserBaseVisitor<string> {
+    public class SqlVisitor : SqlParserBaseVisitor<LinqNode> {
 
-        public override string VisitQuery([NotNull] SqlParserParser.QueryContext context) {
+        public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
             return Visit(context.statement());
         }
 
-        public override string VisitStatement([NotNull] SqlParserParser.StatementContext context) {
+        public override LinqNode VisitStatement([NotNull] SqlParserParser.StatementContext context) {
 
             if (context.selectStmt() != null) return Visit(context.selectStmt());
-            if (context.updateStmt() != null) return Visit(context.updateStmt());
-            if (context.insertStmt() != null) return Visit(context.insertStmt());
-            if (context.deleteStmt() != null) return Visit(context.deleteStmt());
 
-            throw new NotSupportedException("[ERROR] This is not SQL!");
+            throw new NotSupportedException("[ERROR] This is not a SELECT!");
         }
 
-        public override string VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
+        public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
 
-            string tableName = context.tableName().GetText();
-            string baseQuery = $"db.{tableName}";
+            // Table name
 
-            // WHERE check
+            var queryNode = new LinqQueryNode {
+                SourceTable = context.tableName().GetText()
+            };
+
+            // WHERE
 
             if (context.condition() != null) {
-                string whereClause = Visit(context.condition());
-                baseQuery += $".Where(x => {whereClause})";
+                var conditionNode = Visit(context.condition());
+
+                var whereMethod = new LinqMethodCallNode { MethodName = "Where" };
+
+                whereMethod.Arguments.Add(new LinqLambdaNode {
+                    ParameterName = "x",
+                    Body = conditionNode
+                });
+
+                queryNode.Methods.Add(whereMethod);
             }
 
-            // Get columns
+            // Columns
 
-            string columns = Visit(context.columnList());
-            if (columns != "*") {
-                baseQuery += $".Select(x => new {{ {columns} }})";
+            var columnsNode = Visit(context.columnList());
+
+            if (columnsNode is LinqAnonymousObjectNode anonNode) {
+
+                var selectMethod = new LinqMethodCallNode { MethodName = "Select" };
+
+                selectMethod.Arguments.Add(new LinqLambdaNode {
+                    ParameterName = "x",
+                    Body = anonNode
+                });
+
+                queryNode.Methods.Add(selectMethod);
             }
 
-            // End point
+            // ToList() at the end
 
-            baseQuery += ".ToList()";
+            queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
 
-            return baseQuery;
+            return queryNode;
         }
 
-        // '==' and '!=' operators
 
-        public override string VisitCompareCondition([NotNull] SqlParserParser.CompareConditionContext context) {
+        public override LinqNode VisitColumnList([NotNull] SqlParserParser.ColumnListContext context) {
 
-            string left = Visit(context.left);
+            if (context.STAR() != null) {
+                return null; 
+            }
+
+            return Visit(context.idList());
+        }
+
+        public override LinqNode VisitIdList([NotNull] SqlParserParser.IdListContext context) {
+
+            var anonNode = new LinqAnonymousObjectNode();
+
+            foreach (var id in context.IDENTIFIER()) {
+                anonNode.Properties.Add($"x.{id.GetText()}");
+            }
+
+            return anonNode;
+        }
+
+        // Operators
+
+        public override LinqNode VisitCompareCondition([NotNull] SqlParserParser.CompareConditionContext context) {
+
             string op = context.op.GetText();
-            string right = Visit(context.right);
 
             if (op == "=") op = "==";
             if (op == "<>") op = "!=";
 
-            return $"{left} {op} {right}";
+            return new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = op,
+                Right = Visit(context.right)
+            };
         }
 
         // AND
 
-        public override string VisitAndCondition([NotNull] SqlParserParser.AndConditionContext context) {
-            
-            string left = Visit(context.left);
-            string right = Visit(context.right);
+        public override LinqNode VisitAndCondition([NotNull] SqlParserParser.AndConditionContext context) {
 
-            return $"{left} && {right}";
+            return new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = "&&",
+                Right = Visit(context.right)
+            };
         }
 
         // OR
 
-        public override string VisitOrCondition([NotNull] SqlParserParser.OrConditionContext context) {
-            
-            string left = Visit(context.left);
-            string right = Visit(context.right);
-
-            return $"{left} || {right}";
+        public override LinqNode VisitOrCondition([NotNull] SqlParserParser.OrConditionContext context) {
+            return new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = "||",
+                Right = Visit(context.right)
+            };
         }
 
         // Brackets
 
-        public override string VisitParensCondition([NotNull] SqlParserParser.ParensConditionContext context) {
-            
-            string innerCondition = Visit(context.condition());
-            return $"({innerCondition})";
+        public override LinqNode VisitParensCondition([NotNull] SqlParserParser.ParensConditionContext context) {
+            return new LinqParensNode {
+                InnerNode = Visit(context.condition())
+            };
         }
 
-        public override string VisitMathExpr([NotNull] SqlParserParser.MathExprContext context) {
-            string left = Visit(context.left);
-            string op = context.op.GetText(); 
-            string right = Visit(context.right);
+        // Math symbols
 
-            return $"{left} {op} {right}";
+        public override LinqNode VisitMathExpr([NotNull] SqlParserParser.MathExprContext context) {
+            return new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = context.op.GetText(),
+                Right = Visit(context.right)
+            };
         }
 
-        // Text conditions
+        // Expressions
 
-        public override string VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
-            return $"x.{context.GetText()}";
+        public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
+            return new LinqIdentifierNode { Name = $"x.{context.GetText()}" };
         }
 
-        // Number conditions
-
-        public override string VisitNumberExpr([NotNull] SqlParserParser.NumberExprContext context) {
-            return context.GetText();
+        public override LinqNode VisitNumberExpr([NotNull] SqlParserParser.NumberExprContext context) {
+            return new LinqConstantNode { Value = int.Parse(context.GetText()) };
         }
 
-        // Changing '' to ""
-
-        public override string VisitStringExpr([NotNull] SqlParserParser.StringExprContext context) {
-
-            string text = context.GetText().Trim('\'');
-            return $"\"{text}\"";
-        }
-
-        // Getting column list
-        // If there is no list, then return with STAR
-
-        public override string VisitColumnList([NotNull] SqlParserParser.ColumnListContext context) {
-
-            if (context.idList() != null) {
-                return Visit(context.idList());
-            }
-
-            return "*";
-        }
-
-        // Append columns with commas
-
-        public override string VisitIdList([NotNull] SqlParserParser.IdListContext context) {
-
-            var identifiers = context.IDENTIFIER();
-            var columns = System.Linq.Enumerable.Select(identifiers, id => $"x.{id.GetText()}");
-
-            return string.Join(", ", columns);
+        public override LinqNode VisitStringExpr([NotNull] SqlParserParser.StringExprContext context) {
+            return new LinqConstantNode { Value = context.GetText().Trim('\'') };
         }
     }
 }
