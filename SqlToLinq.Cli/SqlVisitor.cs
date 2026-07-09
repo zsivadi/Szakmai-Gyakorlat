@@ -15,6 +15,8 @@ namespace SqlToLinq.Cli {
 
             if (context.selectStmt() != null) return Visit(context.selectStmt());
 
+            // Only SELECT statements are supported in this implementation *yet*
+
             throw new NotSupportedException("[ERROR] This is not a SELECT!");
         }
 
@@ -36,6 +38,7 @@ namespace SqlToLinq.Cli {
             // WHERE
 
             if (context.condition() != null) {
+
                 var conditionNode = Visit(context.condition());
 
                 var whereMethod = new LinqMethodCallNode { MethodName = "Where" };
@@ -46,6 +49,49 @@ namespace SqlToLinq.Cli {
                 });
 
                 queryNode.Methods.Add(whereMethod);
+            }
+
+            // HAVING 
+
+            if (context.havingClause() != null) {
+
+                var havingCondition = Visit(context.havingClause().condition());
+
+                var havingMethod = new LinqMethodCallNode { MethodName = "Where" };
+
+                havingMethod.Arguments.Add(new LinqLambdaNode {
+                    ParameterName = "x",
+                    Body = havingCondition
+                });
+
+                queryNode.Methods.Add(havingMethod);
+            }
+
+            // ORDER BY 
+
+            if (context.orderClause() != null) {
+
+                var orderItems = context.orderClause().orderItem();
+
+                for (int i = 0; i < orderItems.Length; i++) {
+
+                    var item = orderItems[i];
+                    var itemNode = Visit(item.expr());
+                    bool isDesc = item.DESC() != null;
+
+                    string methodName = i == 0
+                        ? (isDesc ? "OrderByDescending" : "OrderBy")
+                        : (isDesc ? "ThenByDescending" : "ThenBy");
+
+                    var orderMethod = new LinqMethodCallNode { MethodName = methodName };
+
+                    orderMethod.Arguments.Add(new LinqLambdaNode {
+                        ParameterName = "x",
+                        Body = itemNode
+                    });
+
+                    queryNode.Methods.Add(orderMethod);
+                }
             }
 
             // Columns
@@ -105,6 +151,23 @@ namespace SqlToLinq.Cli {
                 Left = Visit(context.left),
                 Operator = op,
                 Right = Visit(context.right)
+            };
+        }
+
+        // LIKE (% and _)
+        public override LinqNode VisitLikeCondition([NotNull] SqlParserParser.LikeConditionContext context) {
+
+            var leftNode = Visit(context.left);
+
+            string pattern = context.right.Text.Trim('\'');
+
+            pattern = System.Text.RegularExpressions.Regex.Replace(pattern, "%+", "%");
+
+            string regexPattern = "^" + pattern.Replace("%", ".*").Replace("_", ".") + "$";
+
+            return new LinqRegexMatchNode {
+                Target = leftNode,
+                Pattern = regexPattern
             };
         }
 

@@ -106,4 +106,22 @@ namespace SqlToLinq.Cli {
             return $"new {{ {string.Join(", ", Properties)} }}";
         }
     }
+    public class LinqStringMethodCallNode : LinqNode {
+        public LinqNode Instance { get; set; }
+        public string MethodName { get; set; }
+        public LinqNode Argument { get; set; }
+
+        public override string ToCodeString() {
+            return $"{Instance.ToCodeString()}.{MethodName}({Argument.ToCodeString()})";
+        }
+    }
+
+    public class LinqRegexMatchNode : LinqNode {
+        public LinqNode Target { get; set; }
+        public string Pattern { get; set; }
+
+        public override string ToCodeString() {
+            return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"{Pattern}\")";
+        }
+    }
 }

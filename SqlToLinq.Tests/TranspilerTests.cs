@@ -22,10 +22,8 @@ namespace SqlToLinq.Tests {
 
             foreach (var tc in testCases) {
 
-                if (tc.Id <= 22) {
-                    yield return new TestCaseData(tc.SqlInput, tc.ExpectedLinq)
-                        .SetName($"Test_{tc.Id}_{tc.Desc.Replace(" ", "_")}");
-                }
+                yield return new TestCaseData(tc.SqlInput, tc.ExpectedLinq)
+                    .SetName($"Test_{tc.Id}_{tc.Desc.Replace(" ", "_")}");
             }
         }
 

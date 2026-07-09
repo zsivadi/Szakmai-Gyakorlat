@@ -166,5 +166,65 @@
 		"Desc": "Feltétel nélküli módosítás.",
 		"SqlInput": "SELECT Name, Id, Role FROM Users \nWHERE (Name = 'Gábor' OR Name = 'Anna') \nAND (Score <= 15 OR Bonus = 10) OR Role <> 'Admin'",
 		"ExpectedLinq": "db.Users.ToList().ForEach(u => u.Bonus = 0)"
+	},
+	{
+		"Id": 29,
+		"Desc": "Növekvő rendezés.",
+		"SqlInput": "SELECT * FROM Users ORDER BY Age",
+		"ExpectedLinq": "db.Users.OrderBy(x => x.Age).ToList()"
+	},
+	{
+		"Id": 30,
+		"Desc": "Csökkenő rendezés.",
+		"SqlInput": "SELECT * FROM Users ORDER BY Age DESC",
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ToList()"
+	},
+	{
+		"Id": 31,
+		"Desc": "Többszörös rendezés.",
+		"SqlInput": "SELECT Name FROM Users ORDER BY Age DESC, Name ASC",
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ThenBy(x => x.Name).Select(x => new { x.Name }).ToList()"
+	},
+	{
+		"Id": 32,
+		"Desc": "% a feltétel végén.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'A%'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^A.*$\")).ToList()"
+	},
+	{
+		"Id": 33,
+		"Desc": "% a feltétel elején.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^.*a$\")).ToList()"
+	},
+	{
+		"Id": 34,
+		"Desc": "% mindkét oldalon.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a%'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^.*a.*$\")).ToList()"
+	},
+	{
+		"Id": 35,
+		"Desc": "% középen.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%b'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.*b$\")).ToList()"
+	},
+	{
+		"Id": 36,
+		"Desc": "Több %.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%%%%%b'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.*b$\")).ToList()"
+	},
+	{
+		"Id": 37,
+		"Desc": "_ a szövegben.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B_b'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.b$\")).ToList()"
+	},
+	{
+		"Id": 38,
+		"Desc": "Több _.",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___''",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^...$\")).ToList()"
 	}
 ]
