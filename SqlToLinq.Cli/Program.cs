@@ -61,17 +61,7 @@ namespace SqlToLinq.Cli {
 
                     try {
 
-                        var inputStream = new AntlrInputStream(testCases[i].SqlInput);
-                        var lexer = new SqlParserLexer(inputStream);
-                        var tokens = new CommonTokenStream(lexer);
-                        var parser = new SqlParserParser(tokens);
-
-                        var tree = parser.query();
-
-
-                        var visitor = new SqlVisitor();
-                        LinqNode linqAst = visitor.Visit(tree);
-                        string generatedLinq = linqAst.ToCodeString();
+                        string generatedLinq = SqlToLinqConverter.Convert(testCases[i].SqlInput);
 
                         Console.WriteLine($"{"Generated LINQ:", -25} {generatedLinq}\n\n");
 

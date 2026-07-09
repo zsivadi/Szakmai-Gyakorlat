@@ -224,7 +224,7 @@
 	{
 		"Id": 38,
 		"Desc": "Több _.",
-		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___''",
+		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^...$\")).ToList()"
 	}
 ]

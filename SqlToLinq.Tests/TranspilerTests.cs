@@ -29,16 +29,8 @@ namespace SqlToLinq.Tests {
 
         [TestCaseSource(nameof(GetSelectTestCases))]
         public void Sql_To_Linq_Conversion_Should_Match_Expected(string sqlInput, string expectedLinq) {
-            
-            var inputStream = new AntlrInputStream(sqlInput);
-            var lexer = new SqlParserLexer(inputStream);
-            var tokens = new CommonTokenStream(lexer);
-            var parser = new SqlParserParser(tokens);
-            var tree = parser.query();
-            var visitor = new SqlVisitor();
 
-            LinqNode linqAst = visitor.Visit(tree);
-            string generatedLinq = linqAst?.ToCodeString() ?? "";
+            string generatedLinq = SqlToLinqConverter.Convert(sqlInput);
 
             string cleanGenerated = generatedLinq.Replace(" ", "").Trim();
             string cleanExpected = expectedLinq.Replace(" ", "").Trim();

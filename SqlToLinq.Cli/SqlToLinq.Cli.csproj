@@ -25,5 +25,12 @@
       <Namespace>SqlToLinq.Cli</Namespace>
     </Antlr4>
   </ItemGroup>
+  
+  <ItemGroup>
+  <None Include="..\SqlToLinq.Tests\IOPairs.json">
+    <Link>IOPairs.json</Link>
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
 
 </Project>
