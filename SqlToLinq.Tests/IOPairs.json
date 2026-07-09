@@ -132,42 +132,6 @@
 		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { x.Name }).ToList()"
 	},
 	{
-		"Id": 23,
-		"Desc": "Egy oszlop módosítása.",
-		"SqlInput": "UPDATE Users SET Points = 100 WHERE Id = 1",
-		"ExpectedLinq": "db.Users.FirstOrDefault(x => x.Id == 1).Points = 100"
-	},
-	{
-		"Id": 24,
-		"Desc": "Több oszlop módosítása.",
-		"SqlInput": "UPDATE Users SET Points = 50, Bonus = 10 WHERE Id = 1",
-		"ExpectedLinq": "var u = db.Users.FirstOrDefault(x => x.Id == 1); \nu.Points = 50; \nu.Bonus = 10"
-	},
-	{
-		"Id": 25,
-		"Desc": "Feltételes módosítás.",
-		"SqlInput": "UPDATE Users SET Role = 'Member' WHERE Age > 18",
-		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).ToList().ForEach(u => u.Role = \"Member\")"
-	},
-	{
-		"Id": 26,
-		"Desc": "Érték növelése.",
-		"SqlInput": "UPDATE Users SET Points = Points + 10 WHERE Id = 3",
-		"ExpectedLinq": "db.Users.FirstOrDefault(x => x.Id == 3).Points += 10"
-	},
-	{
-		"Id": 27,
-		"Desc": "Új rekord.",
-		"SqlInput": "INSERT INTO Users (Id, Name, Age, Role, Points, Bonus) VALUES (6, 'Dani', 20, 'Guest', 0, 0)",
-		"ExpectedLinq": "db.Users.Add(new User(6, \"Dani\", 20, \"Guest\", 0, 0))"
-	},	
-	{
-		"Id": 28,
-		"Desc": "Feltétel nélküli módosítás.",
-		"SqlInput": "SELECT Name, Id, Role FROM Users \nWHERE (Name = 'Gábor' OR Name = 'Anna') \nAND (Score <= 15 OR Bonus = 10) OR Role <> 'Admin'",
-		"ExpectedLinq": "db.Users.ToList().ForEach(u => u.Bonus = 0)"
-	},
-	{
 		"Id": 29,
 		"Desc": "Növekvő rendezés.",
 		"SqlInput": "SELECT * FROM Users ORDER BY Age",

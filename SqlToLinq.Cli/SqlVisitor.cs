@@ -1,7 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Antlr4.Runtime;
 using Antlr4.Runtime.Misc;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace SqlToLinq.Cli {
 
@@ -14,28 +17,53 @@ namespace SqlToLinq.Cli {
         public override LinqNode VisitStatement([NotNull] SqlParserParser.StatementContext context) {
 
             if (context.selectStmt() != null) return Visit(context.selectStmt());
+            if (context.updateStmt() != null) return Visit(context.updateStmt());
+            if (context.insertStmt() != null) return Visit(context.insertStmt());
+            if (context.deleteStmt() != null) return Visit(context.deleteStmt());
 
-            // Only SELECT statements are supported in this implementation *yet*
-
-            throw new NotSupportedException("[ERROR] This is not a SELECT!");
+            throw new NotSupportedException("[ERROR] Unknown or unsupported command!");
         }
+
+        // Snake_case to PascalCase conversion for table and column names
 
         private string ToPascalCase(string input) {
 
             if (string.IsNullOrEmpty(input)) return input;
 
-            return char.ToUpper(input[0]) + input.Substring(1);
+            var parts = input.Split('_');
+            var sb = new StringBuilder();
+
+            foreach (var part in parts) {
+                if (part.Length == 0) continue;
+                sb.Append(char.ToUpper(part[0]));
+                if (part.Length > 1) sb.Append(part.Substring(1));
+            }
+
+            return sb.Length > 0 ? sb.ToString() : input;
         }
+
+        // GROUP BY columns extraction
+
+        private List<string> GetGroupByColumns(SqlParserParser.SelectStmtContext selectCtx) {
+
+            if (selectCtx.groupClause() == null) return new List<string>();
+
+            return selectCtx.groupClause().idList().IDENTIFIER()
+                .Select(id => ToPascalCase(id.GetText()))
+                .ToList();
+        }
+
+        // SELECT statement processing
 
         public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
 
-            // Table name
+            // Table name 
 
             var queryNode = new LinqQueryNode {
                 SourceTable = ToPascalCase(context.tableName().GetText())
             };
 
-            // WHERE
+            // WHERE 
 
             if (context.condition() != null) {
 
@@ -51,6 +79,35 @@ namespace SqlToLinq.Cli {
                 queryNode.Methods.Add(whereMethod);
             }
 
+            // GROUP BY 
+
+            var groupKeys = GetGroupByColumns(context);
+            bool hasGroupBy = groupKeys.Count > 0;
+
+            if (hasGroupBy) {
+
+                LinqNode keySelectorBody;
+
+                if (groupKeys.Count == 1) {
+                    keySelectorBody = new LinqIdentifierNode { Name = $"x.{groupKeys[0]}" };
+                } else {
+                    var compositeKey = new LinqAnonymousObjectNode();
+
+                    foreach (var key in groupKeys) {
+                        compositeKey.Properties.Add((null, new LinqIdentifierNode { Name = $"x.{key}" }));
+                    }
+                    keySelectorBody = compositeKey;
+                }
+
+                var groupByMethod = new LinqMethodCallNode { MethodName = "GroupBy" };
+
+                groupByMethod.Arguments.Add(new LinqLambdaNode {
+                    ParameterName = "x",
+                    Body = keySelectorBody
+                });
+                queryNode.Methods.Add(groupByMethod);
+            }
+
             // HAVING 
 
             if (context.havingClause() != null) {
@@ -60,7 +117,7 @@ namespace SqlToLinq.Cli {
                 var havingMethod = new LinqMethodCallNode { MethodName = "Where" };
 
                 havingMethod.Arguments.Add(new LinqLambdaNode {
-                    ParameterName = "x",
+                    ParameterName = hasGroupBy ? "g" : "x",
                     Body = havingCondition
                 });
 
@@ -86,7 +143,7 @@ namespace SqlToLinq.Cli {
                     var orderMethod = new LinqMethodCallNode { MethodName = methodName };
 
                     orderMethod.Arguments.Add(new LinqLambdaNode {
-                        ParameterName = "x",
+                        ParameterName = hasGroupBy ? "g" : "x",
                         Body = itemNode
                     });
 
@@ -103,7 +160,7 @@ namespace SqlToLinq.Cli {
                 var selectMethod = new LinqMethodCallNode { MethodName = "Select" };
 
                 selectMethod.Arguments.Add(new LinqLambdaNode {
-                    ParameterName = "x",
+                    ParameterName = hasGroupBy ? "g" : "x",
                     Body = anonNode
                 });
 
@@ -117,28 +174,46 @@ namespace SqlToLinq.Cli {
             return queryNode;
         }
 
+        // SELECT column list processing
 
         public override LinqNode VisitColumnList([NotNull] SqlParserParser.ColumnListContext context) {
-
-            if (context.STAR() != null) {
-                return null; 
-            }
-
-            return Visit(context.idList());
-        }
-
-        public override LinqNode VisitIdList([NotNull] SqlParserParser.IdListContext context) {
+            if (context.STAR() != null) return null;
 
             var anonNode = new LinqAnonymousObjectNode();
+            foreach (var item in context.selectItem()) {
 
-            foreach (var id in context.IDENTIFIER()) {
-                anonNode.Properties.Add($"x.{id.GetText()}");
+                var exprNode = Visit(item.expr());
+
+                string aliasName = item.IDENTIFIER() != null ? item.IDENTIFIER().GetText() : null;
+
+                anonNode.Properties.Add((aliasName, exprNode));
             }
-
             return anonNode;
         }
 
-        // Operators
+        // Aggregate function processing (COUNT, SUM, AVG, MIN, MAX)
+
+        public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
+
+            if (context.IDENTIFIER() == null) {
+                throw new ArgumentException($"[ERROR] Syntax error in the aggregate function! {context.GetText()}");
+            }
+
+            string funcName = ToPascalCase(context.IDENTIFIER().GetText());
+            if (funcName == "Avg") funcName = "Average";
+
+            LinqNode argNode = null;
+            if (context.expr() != null) {
+                argNode = Visit(context.expr());
+            }
+
+            return new LinqAggregateNode {
+                FunctionName = funcName,
+                Argument = argNode
+            };
+        }
+
+        // Conditions processing
 
         public override LinqNode VisitCompareCondition([NotNull] SqlParserParser.CompareConditionContext context) {
 
@@ -154,24 +229,35 @@ namespace SqlToLinq.Cli {
             };
         }
 
-        // LIKE (% and _)
+        // LIKE condition processing, converting SQL LIKE patterns to C# regex patterns
+
         public override LinqNode VisitLikeCondition([NotNull] SqlParserParser.LikeConditionContext context) {
 
             var leftNode = Visit(context.left);
 
             string pattern = context.right.Text.Trim('\'');
+            pattern = Regex.Replace(pattern, "%+", "%");
 
-            pattern = System.Text.RegularExpressions.Regex.Replace(pattern, "%+", "%");
+            var sb = new StringBuilder("^");
 
-            string regexPattern = "^" + pattern.Replace("%", ".*").Replace("_", ".") + "$";
+            foreach (char c in pattern) {
+                if (c == '%') {
+                    sb.Append(".*");
+                } else if (c == '_') {
+                    sb.Append(".");
+                } else {
+                    sb.Append(Regex.Escape(c.ToString()));
+                }
+            }
+            sb.Append("$");
 
             return new LinqRegexMatchNode {
                 Target = leftNode,
-                Pattern = regexPattern
+                Pattern = sb.ToString()
             };
         }
 
-        // AND
+        // AND condition processing, converting to C# "&&" operator
 
         public override LinqNode VisitAndCondition([NotNull] SqlParserParser.AndConditionContext context) {
 
@@ -182,7 +268,7 @@ namespace SqlToLinq.Cli {
             };
         }
 
-        // OR
+        // OR condition processing, converting to C# "||" operator
 
         public override LinqNode VisitOrCondition([NotNull] SqlParserParser.OrConditionContext context) {
             return new LinqBinaryExpressionNode {
@@ -192,7 +278,7 @@ namespace SqlToLinq.Cli {
             };
         }
 
-        // Brackets
+        // Parentheses condition processing, wrapping the inner condition in parentheses
 
         public override LinqNode VisitParensCondition([NotNull] SqlParserParser.ParensConditionContext context) {
             return new LinqParensNode {
@@ -200,7 +286,7 @@ namespace SqlToLinq.Cli {
             };
         }
 
-        // Math symbols
+        // Mathematical expression processing, converting to C# binary operations
 
         public override LinqNode VisitMathExpr([NotNull] SqlParserParser.MathExprContext context) {
             return new LinqBinaryExpressionNode {
@@ -210,16 +296,37 @@ namespace SqlToLinq.Cli {
             };
         }
 
-        // Expressions
-
+        // Column expression processing, converting to C# property access, considering GROUP BY context
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
-            string rawColumnName = context.GetText();
-            return new LinqIdentifierNode { Name = $"x.{ToPascalCase(rawColumnName)}" };
+            string rawColumnName = ToPascalCase(context.GetText());
+
+            RuleContext current = context.Parent;
+
+            while (current != null) {
+                if (current is SqlParserParser.SelectStmtContext selectCtx) {
+
+                    var groupKeys = GetGroupByColumns(selectCtx);
+                    int idx = groupKeys.IndexOf(rawColumnName);
+
+                    if (idx >= 0) {
+                        string keyAccess = groupKeys.Count == 1 ? "g.Key" : $"g.Key.{rawColumnName}";
+                        return new LinqIdentifierNode { Name = keyAccess };
+                    }
+                    break;
+                }
+                current = current.Parent;
+            }
+
+            return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
         }
+
+        // Number literal processing, converting to C# integer constant
 
         public override LinqNode VisitNumberExpr([NotNull] SqlParserParser.NumberExprContext context) {
             return new LinqConstantNode { Value = int.Parse(context.GetText()) };
         }
+
+        // String literal processing, converting to C# string constant
 
         public override LinqNode VisitStringExpr([NotNull] SqlParserParser.StringExprContext context) {
             return new LinqConstantNode { Value = context.GetText().Trim('\'') };

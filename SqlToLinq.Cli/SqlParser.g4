@@ -10,7 +10,7 @@ statement : selectStmt
 
 
 
-selectStmt : SELECT columnList FROM tableName (WHERE condition)? havingClause? orderClause? ;
+selectStmt : SELECT columnList FROM tableName (WHERE condition)? groupClause? havingClause? orderClause? ;
 
 updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
 
@@ -25,7 +25,11 @@ setClause : assignment (COMMA assignment)* ;
 assignment : IDENTIFIER EQ expr ;
 
 columnList : STAR
-           | idList ;
+           | selectItem (COMMA selectItem)* ;
+
+selectItem : expr (AS? IDENTIFIER)? ;
+
+groupClause : GROUP BY idList ;
 
 idList : IDENTIFIER (COMMA IDENTIFIER)* ;
 
@@ -49,6 +53,7 @@ condition : '(' condition ')'                          # parensCondition
           ;
 
 expr : left=expr op=mathOp right=expr                  # mathExpr
+     | IDENTIFIER '(' (STAR | expr) ')'                # aggregateExpr
      | IDENTIFIER                                      # columnExpr
      | NUMBER                                          # numberExpr
      | STRING_LITERAL                                  # stringExpr
@@ -78,6 +83,13 @@ BY     : [Bb][Yy] ;
 ASC    : [Aa][Ss][Cc] ;
 DESC   : [Dd][Ee][Ss][Cc] ;
 HAVING : [Hh][Aa][Vv][Ii][Nn][Gg] ;
+AS     : [Aa][Ss] ;
+COUNT  : [Cc][Oo][Uu][Nn][Tt] ;
+AVG    : [Aa][Vv][Gg] ;
+SUM    : [Ss][Uu][Mm] ;
+MIN    : [Mm][Ii][Nn] ;
+MAX    : [Mm][Aa][Xx] ;
+GROUP : [Gg][Rr][Oo][Uu][Pp] ;
 
 
 

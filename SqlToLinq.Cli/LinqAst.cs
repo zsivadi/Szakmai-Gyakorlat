@@ -7,12 +7,17 @@ namespace SqlToLinq.Cli {
         public abstract string ToCodeString();
     }
 
-    // The root point
+    // A LINQ query root node
 
     public class LinqQueryNode : LinqNode {
+
+        // Name of the source table 
         public string SourceTable { get; set; }
+
+        // List of chained LINQ method calls 
         public List<LinqMethodCallNode> Methods { get; set; } = new List<LinqMethodCallNode>();
 
+        // Generates the LINQ query code as a string
         public override string ToCodeString() {
 
             string result = $"db.{SourceTable}";
@@ -27,9 +32,14 @@ namespace SqlToLinq.Cli {
     // A LINQ method call
 
     public class LinqMethodCallNode : LinqNode {
+
+        // Name of the LINQ method (e.g., "Where", "Select", "OrderBy")
         public string MethodName { get; set; }
+
+        // List of arguments for the method call (e.g., lambda expressions, constants)
         public List<LinqNode> Arguments { get; set; } = new List<LinqNode>();
 
+        // Generates the method call code as a string, including the method name and its arguments
         public override string ToCodeString() {
 
             if (Arguments == null || Arguments.Count == 0) {
@@ -41,12 +51,17 @@ namespace SqlToLinq.Cli {
         }
     }
 
-    // Creating a lambda expression
+    // A LINQ lambda expression
 
     public class LinqLambdaNode : LinqNode {
+
+        // The name of the parameter used in the lambda expression 
         public string ParameterName { get; set; }
+
+        // The body of the lambda expression
         public LinqNode Body { get; set; }
 
+        // Generates the lambda expression code as a string in the form "parameter => body"
         public override string ToCodeString() {
             return $"{ParameterName} => {Body.ToCodeString()}";
         }
@@ -55,8 +70,14 @@ namespace SqlToLinq.Cli {
     // Binary operations
 
     public class LinqBinaryExpressionNode : LinqNode {
+
+        // Left side
         public LinqNode Left { get; set; }
+
+        // Operator
         public string Operator { get; set; }
+
+        // Right side
         public LinqNode Right { get; set; }
 
         public override string ToCodeString() {
@@ -64,9 +85,11 @@ namespace SqlToLinq.Cli {
         }
     }
 
-    // Columns
+    // Identifiers 
 
     public class LinqIdentifierNode : LinqNode {
+
+        // The name of the identifier 
         public string Name { get; set; }
 
         public override string ToCodeString() {
@@ -77,9 +100,12 @@ namespace SqlToLinq.Cli {
     // Constant values
 
     public class LinqConstantNode : LinqNode {
+
+        // The constant value 
         public object Value { get; set; }
 
         public override string ToCodeString() {
+
             if (Value is string str) {
                 return $"\"{str}\"";
             }
@@ -90,6 +116,8 @@ namespace SqlToLinq.Cli {
     // Brackets
 
     public class LinqParensNode : LinqNode {
+
+        // The inner expression inside the parentheses
         public LinqNode InnerNode { get; set; }
 
         public override string ToCodeString() {
@@ -100,15 +128,34 @@ namespace SqlToLinq.Cli {
     // New anon object for Select()
 
     public class LinqAnonymousObjectNode : LinqNode {
-        public List<string> Properties { get; set; } = new List<string>();
 
+        // A list of properties in the form of (property name, expression) pairs
+        // The property name can be empty for anonymous properties
+        public List<(string Name, LinqNode Expression)> Properties { get; set; } = new List<(string, LinqNode)>();
+
+        // Generates the code for creating a new anonymous object 
         public override string ToCodeString() {
-            return $"new {{ {string.Join(", ", Properties)} }}";
+
+            var props = Properties.Select(p => {
+
+                // If the property name is empty, just return the expression without a name
+
+                if (string.IsNullOrEmpty(p.Name)) {
+                    return p.Expression.ToCodeString();
+                }
+                return $"{p.Name} = {p.Expression.ToCodeString()}";
+            });
+            return $"new {{ {string.Join(", ", props)} }}";
         }
     }
+
+
     public class LinqStringMethodCallNode : LinqNode {
+
         public LinqNode Instance { get; set; }
+
         public string MethodName { get; set; }
+
         public LinqNode Argument { get; set; }
 
         public override string ToCodeString() {
@@ -116,12 +163,44 @@ namespace SqlToLinq.Cli {
         }
     }
 
+    // Regex for LIKE patterns
+
     public class LinqRegexMatchNode : LinqNode {
+        
         public LinqNode Target { get; set; }
+
         public string Pattern { get; set; }
 
         public override string ToCodeString() {
             return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"{Pattern}\")";
+        }
+    }
+
+    // GROUP BY
+
+    public class LinqGroupByNode : LinqNode {
+
+        public string KeySelector { get; set; }
+
+        public override string ToCodeString() {
+            return $".GroupBy(x => x.{KeySelector})";
+        }
+    }
+
+    // Aggregation functions (Count, Sum, Average, Min, Max)
+
+    public class LinqAggregateNode : LinqNode {
+
+        public string FunctionName { get; set; }
+        public LinqNode Argument { get; set; }   
+
+        public override string ToCodeString() {
+
+            if (Argument == null) {
+                return $"g.{FunctionName}()";
+            }
+
+            return $"g.{FunctionName}(x => {Argument.ToCodeString()})";
         }
     }
 }

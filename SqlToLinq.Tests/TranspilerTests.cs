@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
+using SqlToLinq.Cli;
 using Antlr4.Runtime;
 using NUnit.Framework;
-using SqlToLinq.Cli; 
+using System.Text.Json;
+using System.Collections.Generic;
 
 namespace SqlToLinq.Tests {
     [TestFixture]
@@ -17,6 +17,7 @@ namespace SqlToLinq.Tests {
                 throw new FileNotFoundException($"[ERROR] Test file cannot found: {jsonPath}");
 
             string jsonString = File.ReadAllText(jsonPath);
+
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var testCases = JsonSerializer.Deserialize<List<TestCase>>(jsonString, options);
 
