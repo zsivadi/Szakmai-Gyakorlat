@@ -166,13 +166,16 @@ namespace SqlToLinq.Cli {
     // Regex for LIKE patterns
 
     public class LinqRegexMatchNode : LinqNode {
-        
+
         public LinqNode Target { get; set; }
 
         public string Pattern { get; set; }
 
         public override string ToCodeString() {
-            return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"{Pattern}\")";
+
+            string escapedPattern = Pattern?.Replace("\\", "\\\\") ?? "";
+
+            return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"(?i){escapedPattern}\")";
         }
     }
 

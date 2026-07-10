@@ -84,7 +84,6 @@ ASC    : [Aa][Ss][Cc] ;
 DESC   : [Dd][Ee][Ss][Cc] ;
 HAVING : [Hh][Aa][Vv][Ii][Nn][Gg] ;
 AS     : [Aa][Ss] ;
-COUNT  : [Cc][Oo][Uu][Nn][Tt] ;
 AVG    : [Aa][Vv][Gg] ;
 SUM    : [Ss][Uu][Mm] ;
 MIN    : [Mm][Ii][Nn] ;

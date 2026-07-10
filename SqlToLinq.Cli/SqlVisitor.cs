@@ -10,6 +10,8 @@ namespace SqlToLinq.Cli {
 
     public class SqlVisitor : SqlParserBaseVisitor<LinqNode> {
 
+        private bool _inWhereClause = false;
+
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
             return Visit(context.statement());
         }
@@ -35,8 +37,12 @@ namespace SqlToLinq.Cli {
 
             foreach (var part in parts) {
                 if (part.Length == 0) continue;
+
                 sb.Append(char.ToUpper(part[0]));
-                if (part.Length > 1) sb.Append(part.Substring(1));
+
+                if (part.Length > 1) {
+                    sb.Append(part.Substring(1).ToLower());
+                }
             }
 
             return sb.Length > 0 ? sb.ToString() : input;
@@ -67,7 +73,9 @@ namespace SqlToLinq.Cli {
 
             if (context.condition() != null) {
 
+                _inWhereClause = true;
                 var conditionNode = Visit(context.condition());
+                _inWhereClause = false;
 
                 var whereMethod = new LinqMethodCallNode { MethodName = "Where" };
 
@@ -151,7 +159,7 @@ namespace SqlToLinq.Cli {
                 }
             }
 
-            // Columns
+            // Columns  
 
             var columnsNode = Visit(context.columnList());
 
@@ -165,6 +173,20 @@ namespace SqlToLinq.Cli {
                 });
 
                 queryNode.Methods.Add(selectMethod);
+            } else {
+
+                // If there is a GROUP BY, we need to select the first item from each group
+
+                if (hasGroupBy) {
+
+                    var selectMethod = new LinqMethodCallNode { MethodName = "Select" };
+
+                    selectMethod.Arguments.Add(new LinqLambdaNode {
+                        ParameterName = "g",
+                        Body = new LinqIdentifierNode { Name = "g.FirstOrDefault()" }
+                    });
+                    queryNode.Methods.Add(selectMethod);
+                }
             }
 
             // ToList() at the end
@@ -185,6 +207,10 @@ namespace SqlToLinq.Cli {
                 var exprNode = Visit(item.expr());
 
                 string aliasName = item.IDENTIFIER() != null ? item.IDENTIFIER().GetText() : null;
+
+                if (aliasName == null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+                    aliasName = ToPascalCase(colCtx.GetText());
+                }
 
                 anonNode.Properties.Add((aliasName, exprNode));
             }
@@ -300,21 +326,37 @@ namespace SqlToLinq.Cli {
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
             string rawColumnName = ToPascalCase(context.GetText());
 
+            if (_inWhereClause) {
+                return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
+            }
+
             RuleContext current = context.Parent;
+            bool insideGroupBySelect = false;
 
             while (current != null) {
                 if (current is SqlParserParser.SelectStmtContext selectCtx) {
+                    if (selectCtx.groupClause() != null) {
 
-                    var groupKeys = GetGroupByColumns(selectCtx);
-                    int idx = groupKeys.IndexOf(rawColumnName);
+                        insideGroupBySelect = true;
 
-                    if (idx >= 0) {
-                        string keyAccess = groupKeys.Count == 1 ? "g.Key" : $"g.Key.{rawColumnName}";
-                        return new LinqIdentifierNode { Name = keyAccess };
+                        var idNodes = selectCtx.groupClause().idList().IDENTIFIER();
+
+                        if (idNodes != null && idNodes.Length > 0) {
+
+                            string groupKey = ToPascalCase(idNodes[0].GetText());
+
+                            if (rawColumnName == groupKey) {
+                                return new LinqIdentifierNode { Name = "g.Key" };
+                            }
+                        }
                     }
                     break;
                 }
                 current = current.Parent;
+            }
+
+            if (insideGroupBySelect) {
+                return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
             }
 
             return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
