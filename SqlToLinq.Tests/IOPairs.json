@@ -9,19 +9,19 @@
 		"Id": 2,
 		"Desc": "Lekérdezés oszlopkiválasztással.",
 		"SqlInput": "SELECT Id FROM Users",
-		"ExpectedLinq": "db.Users.Select(x => new { x.Id }).ToList()"
+		"ExpectedLinq": "db.Users.Select(x => new { Id = x.Id }).ToList()"
 	},
 	{
 		"Id": 3,
 		"Desc": "Két oszlop vesszővel elválasztva.",
 		"SqlInput": "SELECT Id, Name FROM Users",
-		"ExpectedLinq": "db.Users.Select(x => new { x.Id, x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Select(x => new { Id = x.Id, Name = x.Name }).ToList()"
 	},
 	{
 		"Id": 4,
 		"Desc": "Három oszlop több vesszővel elválasztva.",
 		"SqlInput": "SELECT Id, Name, Age FROM Users",
-		"ExpectedLinq": "db.Users.Select(x => new { x.Id, x.Name, x.Age }).ToList()"
+		"ExpectedLinq": "db.Users.Select(x => new { Id = x.Id, Name = x.Name, Age = x.Age }).ToList()"
 	},
 	{
 		"Id": 5,
@@ -117,7 +117,7 @@
 		"Id": 20,
 		"Desc": "Szóközök hiánya az operátorok és vesszők körül.",
 		"SqlInput": "SELECT Name,Age FROM Users WHERE Age>18",
-		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).Select(x => new { x.Name, x.Age }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).Select(x => new { Name = x.Name, Age = x.Age }).ToList()"
 	},
 	{
 		"Id": 21,
@@ -129,7 +129,7 @@
 		"Id": 22,
 		"Desc": "Oszlopválasztás láncolása és sortörés.",
 		"SqlInput": "SELECT Name FROM Users \nWHERE Age >= 21",
-		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { Name = x.Name }).ToList()"
 	},
 	{
 		"Id": 29,
@@ -147,48 +147,48 @@
 		"Id": 31,
 		"Desc": "Többszörös rendezés.",
 		"SqlInput": "SELECT Name FROM Users ORDER BY Age DESC, Name ASC",
-		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ThenBy(x => x.Name).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ThenBy(x => x.Name).Select(x => new { Name = x.Name }).ToList()"
 	},
 	{
 		"Id": 32,
 		"Desc": "% a feltétel végén.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'A%'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^A.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")).ToList()"
 	},
 	{
 		"Id": 33,
 		"Desc": "% a feltétel elején.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^.*a$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a$\")).ToList()"
 	},
 	{
 		"Id": 34,
 		"Desc": "% mindkét oldalon.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a%'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^.*a.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a.*$\")).ToList()"
 	},
 	{
 		"Id": 35,
 		"Desc": "% középen.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.*b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
 	},
 	{
 		"Id": 36,
 		"Desc": "Több %.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%%%%%b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.*b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
 	},
 	{
 		"Id": 37,
 		"Desc": "_ a szövegben.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B_b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^B.b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.b$\")).ToList()"
 	},
 	{
 		"Id": 38,
 		"Desc": "Több _.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"^...$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^...$\")).ToList()"
 	}
 ]
