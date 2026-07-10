@@ -1,0 +1,50 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[hungarian]{babel}
+
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\bibliographystyle{plain}
+
+\title{SQL-LINQ forráskód fordító dokumentáció}
+\author{Ivádi Zsombor}
+\date{2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\newpage
+
+\section{Bevezetés}
+A modern szoftverrendszerek jelentős része valamilyen adatbázis-kezelő rendszert használ az adatok tárolására és lekérdezésére. Az adatbázisok kezelésének egyik legelterjedtebb eszköze az SQL (Structured Query Language), amely deklaratív módon teszi lehetővé az adatok lekérdezését és módosítását. Az SQL széles körben alkalmazott technológia, amely mára az adatbázis-kezelő rendszerek alapvető lekérdezési nyelve.
+
+A modern objektumorientált programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely lehetővé teszi lekérdezések írását közvetlenül a C\# programozási nyelv részeként. A LINQ segítségével a fejlesztők ugyanazon programozási nyelvi környezetben dolgozhatnak mind az üzleti logikával, mind az adatlekérdezésekkel.
+
+Az SQL és LINQ közötti eltérés azonban kihívást jelenthet olyan esetekben, amikor egy már meglévő SQL lekérdezést szükséges egy objektumorientált alkalmazásban felhasználni. A két nyelv eltérő szintaxissal és eltérő szemléletmóddal rendelkezik, ezért az átalakítás manuális elvégzése időigényes és hibalehetőségeket tartalmazhat.
+
+Ezen dokumentáció egy olyan fordító (transpiler) tervezését és megvalósítását mutatja be, amely SQL lekérdezések automatikus LINQ kifejezésekké alakítására képes. A projekt célja annak vizsgálata, hogy milyen módon valósítható meg egy ilyen fordító, milyen korlátok merülnek fel az SQL és LINQ közötti leképezés során, valamint milyen architekturális megoldások szükségesek egy ilyen rendszer létrehozásához.
+
+A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásának folyamata, az absztrakt szintaxisfa (Abstract Syntax Tree) alapú reprezentáció kialakítása, valamint a generált LINQ kód előállítása.
+
+\section{A probléma bemutatása}
+
+\section{Szakirodalmi áttekintés}
+
+\section{Tervezés}
+
+\section{Megvalósítás}
+
+\section{Tesztelés}
+
+\section{Összegzés}
+
+\bibliography{irodalom}
+
+\end{document}
