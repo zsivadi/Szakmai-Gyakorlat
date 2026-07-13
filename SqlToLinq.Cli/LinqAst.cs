@@ -85,6 +85,21 @@ namespace SqlToLinq.Cli {
         }
     }
 
+    // NOT (unary negation)
+
+    public class LinqUnaryExpressionNode : LinqNode {
+
+        // The C# prefix operator (currently only "!")
+        public string Operator { get; set; }
+
+        // The negated expression
+        public LinqNode Operand { get; set; }
+
+        public override string ToCodeString() {
+            return $"{Operator}({Operand.ToCodeString()})";
+        }
+    }
+
     // Identifiers 
 
     public class LinqIdentifierNode : LinqNode {
@@ -195,7 +210,7 @@ namespace SqlToLinq.Cli {
     public class LinqAggregateNode : LinqNode {
 
         public string FunctionName { get; set; }
-        public LinqNode Argument { get; set; }   
+        public LinqNode Argument { get; set; }
 
         public override string ToCodeString() {
 

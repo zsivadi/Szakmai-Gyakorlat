@@ -11,6 +11,9 @@ namespace SqlToLinq.Cli {
     public class SqlVisitor : SqlParserBaseVisitor<LinqNode> {
 
         private bool _inWhereClause = false;
+        private bool _inAggregate = false;
+
+        private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
             return Visit(context.statement());
@@ -62,6 +65,19 @@ namespace SqlToLinq.Cli {
         // SELECT statement processing
 
         public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
+
+            if (context.columnList() != null && context.columnList().STAR() == null) {
+                foreach (var item in context.columnList().selectItem()) {
+
+                    if (item.IDENTIFIER() != null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+
+                        string aliasName = ToPascalCase(item.IDENTIFIER().GetText());
+                        string originalName = ToPascalCase(colCtx.GetText());
+
+                        _selectAliases[aliasName] = originalName;
+                    }
+                }
+            }
 
             // Table name 
 
@@ -228,9 +244,15 @@ namespace SqlToLinq.Cli {
             string funcName = ToPascalCase(context.IDENTIFIER().GetText());
             if (funcName == "Avg") funcName = "Average";
 
+            if (funcName == "Count") {
+                return new LinqAggregateNode { FunctionName = "Count", Argument = null };
+            }
+
             LinqNode argNode = null;
             if (context.expr() != null) {
+                _inAggregate = true;
                 argNode = Visit(context.expr());
+                _inAggregate = false;
             }
 
             return new LinqAggregateNode {
@@ -277,9 +299,53 @@ namespace SqlToLinq.Cli {
             }
             sb.Append("$");
 
-            return new LinqRegexMatchNode {
+            LinqNode regexNode = new LinqRegexMatchNode {
                 Target = leftNode,
                 Pattern = sb.ToString()
+            };
+
+            if (context.NOT() != null) {
+                return new LinqUnaryExpressionNode { Operator = "!", Operand = regexNode };
+            }
+
+            return regexNode;
+        }
+
+        // BETWEEN condition processing, converting to two chained comparisons joined with "&&"
+
+        public override LinqNode VisitBetweenCondition([NotNull] SqlParserParser.BetweenConditionContext context) {
+
+            var lowerBound = new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = ">=",
+                Right = Visit(context.low)
+            };
+
+            var upperBound = new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = "<=",
+                Right = Visit(context.high)
+            };
+
+            LinqNode betweenExpr = new LinqBinaryExpressionNode {
+                Left = lowerBound,
+                Operator = "&&",
+                Right = upperBound
+            };
+
+            if (context.NOT() != null) {
+                return new LinqUnaryExpressionNode { Operator = "!", Operand = betweenExpr };
+            }
+
+            return betweenExpr;
+        }
+
+        // NOT condition processing, converting to C# "!" prefix operator
+
+        public override LinqNode VisitNotCondition([NotNull] SqlParserParser.NotConditionContext context) {
+            return new LinqUnaryExpressionNode {
+                Operator = "!",
+                Operand = Visit(context.condition())
             };
         }
 
@@ -326,7 +392,11 @@ namespace SqlToLinq.Cli {
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
             string rawColumnName = ToPascalCase(context.GetText());
 
-            if (_inWhereClause) {
+            if (_selectAliases.ContainsKey(rawColumnName)) {
+                rawColumnName = _selectAliases[rawColumnName];
+            }
+
+            if (_inWhereClause || _inAggregate) {
                 return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
             }
 

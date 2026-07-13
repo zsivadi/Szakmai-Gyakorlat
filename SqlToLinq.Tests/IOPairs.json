@@ -110,7 +110,7 @@
 	{
 		"Id": 19,
 		"Desc": "Többszörös szóközök.",
-		"SqlInput": "SELECT  *  FROM  Users",
+		"SqlInput": "SELECT  * FROM  Users",
 		"ExpectedLinq": "db.Users.ToList()"
 	},
 	{
@@ -132,63 +132,219 @@
 		"ExpectedLinq": "db.Users.Where(x => x.Age >= 21).Select(x => new { Name = x.Name }).ToList()"
 	},
 	{
-		"Id": 29,
+		"Id": 23,
 		"Desc": "Növekvő rendezés.",
 		"SqlInput": "SELECT * FROM Users ORDER BY Age",
 		"ExpectedLinq": "db.Users.OrderBy(x => x.Age).ToList()"
 	},
 	{
-		"Id": 30,
+		"Id": 24,
 		"Desc": "Csökkenő rendezés.",
 		"SqlInput": "SELECT * FROM Users ORDER BY Age DESC",
 		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ToList()"
 	},
 	{
-		"Id": 31,
+		"Id": 25,
 		"Desc": "Többszörös rendezés.",
 		"SqlInput": "SELECT Name FROM Users ORDER BY Age DESC, Name ASC",
 		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).ThenBy(x => x.Name).Select(x => new { Name = x.Name }).ToList()"
 	},
 	{
-		"Id": 32,
+		"Id": 26,
 		"Desc": "% a feltétel végén.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'A%'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")).ToList()"
 	},
 	{
-		"Id": 33,
+		"Id": 27,
 		"Desc": "% a feltétel elején.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a$\")).ToList()"
 	},
 	{
-		"Id": 34,
+		"Id": 28,
 		"Desc": "% mindkét oldalon.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a%'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a.*$\")).ToList()"
 	},
 	{
-		"Id": 35,
+		"Id": 29,
 		"Desc": "% középen.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%b'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
 	},
 	{
-		"Id": 36,
+		"Id": 30,
 		"Desc": "Több %.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%%%%%b'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
 	},
 	{
-		"Id": 37,
+		"Id": 31,
 		"Desc": "_ a szövegben.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B_b'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.b$\")).ToList()"
 	},
 	{
-		"Id": 38,
+		"Id": 32,
 		"Desc": "Több _.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___'",
 		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^...$\")).ToList()"
+	},
+	{
+		"Id": 33,
+		"Desc": "Egyszerű Group By egy csillaggal.",
+		"SqlInput": "SELECT * FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => g.FirstOrDefault()).ToList()"
+	},
+	{
+		"Id": 34,
+		"Desc": "Group By kulcs lekérése explicit alias nélkül.",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 35,
+		"Desc": "Sima oszlop lekérése Group By után.",
+		"SqlInput": "SELECT Name FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Name = g.FirstOrDefault().Name }).ToList()"
+	},
+	{
+		"Id": 36,
+		"Desc": "Group By kulcs és nem-kulcs oszlop vegyesen.",
+		"SqlInput": "SELECT Role, Points FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key, Points = g.FirstOrDefault().Points }).ToList()"
+	},
+	{
+		"Id": 37,
+		"Desc": "Group By explicit AS aliasszal.",
+		"SqlInput": "SELECT Role AS Feladatkor FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Feladatkor = g.Key }).ToList()"
+	},
+	{
+		"Id": 38,
+		"Desc": "Where és Group By kombinációja.",
+		"SqlInput": "SELECT Role FROM Users WHERE Age > 20 GROUP BY Role",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 20).GroupBy(x => x.Role).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 39,
+		"Desc": "Egyszerű BETWEEN operátor számokra.",
+		"SqlInput": "SELECT * FROM Users WHERE Age BETWEEN 20 AND 30",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 20 && x.Age <= 30).ToList()"
+	},
+	{
+		"Id": 40,
+		"Desc": "BETWEEN operátor matematikai kifejezéssel kombinálva.",
+		"SqlInput": "SELECT * FROM Users WHERE Points + Bonus BETWEEN 50 AND 150",
+		"ExpectedLinq": "db.Users.Where(x => x.Points + x.Bonus >= 50 && x.Points + x.Bonus <= 150).ToList()"
+	},
+	{
+		"Id": 41,
+		"Desc": "NOT operátor egyszerű reláció tagadására.",
+		"SqlInput": "SELECT * FROM Users WHERE NOT Age = 18",
+		"ExpectedLinq": "db.Users.Where(x => !(x.Age == 18)).ToList()"
+	},
+	{
+		"Id": 42,
+		"Desc": "NOT operátor összetett zárójeles kifejezésre.",
+		"SqlInput": "SELECT * FROM Users WHERE NOT (Age < 18 OR Points < 10)",
+		"ExpectedLinq": "db.Users.Where(x => !(x.Age < 18 || x.Points < 10)).ToList()"
+	},
+	{
+		"Id": 43,
+		"Desc": "NOT LIKE minta tagadása.",
+		"SqlInput": "SELECT * FROM Users WHERE Name NOT LIKE 'A%'",
+		"ExpectedLinq": "db.Users.Where(x => !System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")).ToList()"
+	},
+	{
+		"Id": 44,
+		"Desc": "Egyszerű növekvő rendezés.",
+		"SqlInput": "SELECT * FROM Users ORDER BY Age",
+		"ExpectedLinq": "db.Users.OrderBy(x => x.Age).ToList()"
+	},
+	{
+		"Id": 45,
+		"Desc": "Egyszerű csökkenő rendezés.",
+		"SqlInput": "SELECT * FROM Users ORDER BY Points DESC",
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Points).ToList()"
+	},
+	{
+		"Id": 46,
+		"Desc": "Többszörös rendezés különböző irányokkal.",
+		"SqlInput": "SELECT * FROM Users ORDER BY Role ASC, Age DESC",
+		"ExpectedLinq": "db.Users.OrderBy(x => x.Role).ThenByDescending(x => x.Age).ToList()"
+	},
+	{
+		"Id": 47,
+		"Desc": "Group By egyetlen kulccsal.",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 48,
+		"Desc": "Group By kulccsal és aggregációval (AS alias).",
+		"SqlInput": "SELECT Role, COUNT(Id) AS Db FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key, Db = g.Count() }).ToList()"
+	},
+	{
+		"Id": 49,
+		"Desc": "Group By COUNT(*) aggregációval.",
+		"SqlInput": "SELECT Role, COUNT(*) AS Total FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key, Total = g.Count() }).ToList()"
+	},
+	{
+		"Id": 50,
+		"Desc": "Group By SUM aggregációval.",
+		"SqlInput": "SELECT Role, SUM(Points) AS OsszPont FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key, OsszPont = g.Sum(x => x.Points) }).ToList()"
+	},
+	{
+		"Id": 51,
+		"Desc": "Group By MIN és MAX aggregációval egyszerre.",
+		"SqlInput": "SELECT Role, MIN(Age) AS MinKor, MAX(Age) AS MaxKor FROM Users GROUP BY Role",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Select(g => new { Role = g.Key, MinKor = g.Min(x => x.Age), MaxKor = g.Max(x => x.Age) }).ToList()"
+	},
+	{
+		"Id": 52,
+		"Desc": "Egyszerű HAVING feltétel.",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role HAVING COUNT(*) > 2",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Count() > 2).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 53,
+		"Desc": "HAVING feltétel oszlopspecifikus aggregációval.",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role HAVING SUM(Points) >= 100",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Sum(x => x.Points) >= 100).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 54,
+		"Desc": "WHERE és GROUP BY és ORDER BY kombinációja.",
+		"SqlInput": "SELECT Role FROM Users WHERE Age > 18 GROUP BY Role ORDER BY Role DESC",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 18).GroupBy(x => x.Role).OrderByDescending(g => g.Key).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 55,
+		"Desc": "Teljes lánc: WHERE, GROUP BY, HAVING, ORDER BY.",
+		"SqlInput": "SELECT Role FROM Users WHERE Age >= 18 GROUP BY Role HAVING COUNT(*) > 1 ORDER BY Role ASC",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 18).GroupBy(x => x.Role).Where(g => g.Count() > 1).OrderBy(g => g.Key).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 56,
+		"Desc": "HAVING több feltétellel (AND).",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role HAVING COUNT(*) > 1 AND SUM(Bonus) > 10",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Count() > 1 && g.Sum(x => x.Bonus) > 10).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 57,
+		"Desc": "ORDER BY kiválasztott alias alapján.",
+		"SqlInput": "SELECT Name AS Nev, Age AS Kor FROM Users ORDER BY Kor DESC",
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).Select(x => new { Nev = x.Name, Kor = x.Age }).ToList()"
+	},
+	{
+		"Id": 58,
+		"Desc": "NOT BETWEEN tagadás.",
+		"SqlInput": "SELECT * FROM Users WHERE Age NOT BETWEEN 20 AND 30",
+		"ExpectedLinq": "db.Users.Where(x => !(x.Age >= 20 && x.Age <= 30)).ToList()"
 	}
 ]
