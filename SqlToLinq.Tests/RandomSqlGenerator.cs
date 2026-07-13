@@ -3,27 +3,33 @@ using System.Collections.Generic;
 using System.Linq;
 
 namespace SqlToLinq.Tests {
-    
+
     public class RandomSqlGenerator {
 
         private readonly Random _rng;
 
         private static readonly string[] Tables = { "Users" };
-        private static readonly string[] Columns = { "Name", "Role" };
-        private static readonly string[] CompOps = { "=", "<>" };
-        private static readonly string[] LikePatterns = { "B%", "_ob", "B_b", "%o%", "Ali%", "B.b", "%" };
-        private static readonly string[] Words = { "Bob", "Alice", "Miskolc", "Eger", "" };
+
+        private static readonly string[] StringColumns = { "Name", "Role" };
+        private static readonly string[] NumericColumns = { "Age", "Points", "Bonus", "Id" };
+        private static readonly string[] AllColumns = StringColumns.Concat(NumericColumns).ToArray();
+
+        private static readonly string[] StringOps = { "=", "<>" };
+        private static readonly string[] NumericOps = { "=", "<>", ">=", "<=", ">", "<" };
+
+        private static readonly string[] LikePatterns = { "B%", "_ob", "B_b", "%o%", "Ali%", "B.b", "%", "A%", "%in" };
+        private static readonly string[] StringWords = { "Bob", "Alice", "Admin", "User", "Moderator", "Bab", "Bcb", "" };
+        private static readonly string[] NumericWords = { "0", "5", "10", "15", "20", "50", "80", "100", "200" };
 
         public RandomSqlGenerator(int seed) {
             _rng = new Random(seed);
         }
 
         // Generates a random SQL SELECT statement with optional WHERE, GROUP BY, HAVING, and ORDER BY clauses. 
-
         public string NextSelect() {
 
             string table = Pick(Tables);
-            string columns = _rng.Next(2) == 0 ? "*" : string.Join(", ", RandomSubset(Columns));
+            string columns = _rng.Next(2) == 0 ? "*" : string.Join(", ", RandomSubset(AllColumns));
 
             string sql = $"SELECT {columns} FROM {table}";
 
@@ -33,15 +39,15 @@ namespace SqlToLinq.Tests {
 
             bool hasGroupBy = _rng.Next(3) == 0;
             if (hasGroupBy) {
-                sql += $" GROUP BY {Pick(Columns)}";
+                sql += $" GROUP BY {Pick(AllColumns)}";
 
                 if (_rng.Next(2) == 0) {
-                    sql += $" HAVING COUNT(*) {Pick(CompOps)} {_rng.Next(1, 10)}";
+                    sql += $" HAVING COUNT(*) {Pick(NumericOps)} {_rng.Next(1, 10)}";
                 }
             }
 
             if (_rng.Next(2) == 0) {
-                sql += $" ORDER BY {Pick(Columns)} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
+                sql += $" ORDER BY {Pick(AllColumns)} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
             }
 
             return sql + ";";
@@ -50,7 +56,6 @@ namespace SqlToLinq.Tests {
         private string RandomCondition(int depth) {
 
             // Depth limit to avoid too deep recursion 
-
             if (depth >= 2 || _rng.Next(3) == 0) {
                 return RandomSimpleCondition();
             }
@@ -64,16 +69,32 @@ namespace SqlToLinq.Tests {
 
         private string RandomSimpleCondition() {
 
-            string column = Pick(Columns);
+            bool isStringCondition = _rng.Next(2) == 0;
 
-            if (_rng.Next(3) == 0) {
-                return $"{column} LIKE '{Pick(LikePatterns)}'";
+            if (isStringCondition) {
+
+                string column = Pick(StringColumns);
+
+                if (_rng.Next(3) == 0) {
+                    return $"{column} LIKE '{Pick(LikePatterns)}'";
+                }
+
+                string op = Pick(StringOps);
+                string value = $"'{Pick(StringWords)}'";
+
+                return $"{column} {op} {value}";
+            } else {
+
+                string column = Pick(NumericColumns);
+                string op = Pick(NumericOps);
+                string value = Pick(NumericWords);
+
+                if (column == "Age" && _rng.Next(2) == 0) {
+                    value = _rng.Next(15, 50).ToString();
+                }
+
+                return $"{column} {op} {value}";
             }
-
-            string op = Pick(CompOps);
-            string value = column == "Age" ? _rng.Next(0, 100).ToString() : $"'{Pick(Words)}'";
-
-            return $"{column} {op} {value}";
         }
 
         private IEnumerable<string> RandomSubset(string[] items) {
