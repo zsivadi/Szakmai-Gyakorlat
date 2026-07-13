@@ -22,4 +22,4 @@ flowchart TD
         LinqAst --> CodeGenNode[Code Generator]
     end
     
-    CodeGenNode --> Output[Generated LINQ: db.Users.Take(5).Select(...).ToList()]
+    CodeGenNode --> Output["Generated LINQ: db.Users.Take#40;5#41;.Select#40;...#41;.ToList#40;#41;"]

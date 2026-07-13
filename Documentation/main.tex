@@ -1,5 +1,7 @@
 \documentclass[a4paper,12pt]{article}
 
+\usepackage{hyphenat}
+
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[hungarian]{babel}
@@ -7,6 +9,7 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{listings}
+\usepackage{microtype}
 
 \bibliographystyle{plain}
 
@@ -25,15 +28,24 @@
 \section{Bevezetés}
 A modern szoftverrendszerek jelentős része valamilyen adatbázis-kezelő rendszert használ az adatok tárolására és lekérdezésére. Az adatbázisok kezelésének egyik legelterjedtebb eszköze az SQL (Structured Query Language), amely deklaratív módon teszi lehetővé az adatok lekérdezését és módosítását. Az SQL széles körben alkalmazott technológia, amely mára az adatbázis-kezelő rendszerek alapvető lekérdezési nyelve.
 
-A modern objektumorientált programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely lehetővé teszi lekérdezések írását közvetlenül a C\# programozási nyelv részeként. A LINQ segítségével a fejlesztők ugyanazon programozási nyelvi környezetben dolgozhatnak mind az üzleti logikával, mind az adatlekérdezésekkel.
+A modern objektumorientált programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. Erre a problémára különböző programozási nyelvek és platformok eltérő megoldásokat kínálnak. A Java környezetben például a Stream API biztosít lehetőséget kollekciók deklaratív feldolgozására, míg a funkcionális programozási nyelvekben, mint például a Scala vagy a Kotlin, a beépített kollekcióműveletek hasonló szemléletet követnek. Ezek a megoldások lehetővé teszik az adatok feldolgozásának kifejezését deklaratív módon.
 
-Az SQL és LINQ közötti eltérés azonban kihívást jelenthet olyan esetekben, amikor egy már meglévő SQL lekérdezést szükséges egy objektumorientált alkalmazásban felhasználni. A két nyelv eltérő szintaxissal és eltérő szemléletmóddal rendelkezik, ezért az átalakítás manuális elvégzése időigényes és hibalehetőségeket tartalmazhat.
+A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely a lekérdezési lehetőségeket közvetlenül a programozási nyelv szintaxisába integrálja. A LINQ lehetővé teszi, hogy a fejlesztők egységes módon kezeljék a különböző adatforrásokból származó adatokat, legyen szó objektumgyűjteményekről, adatbázisokról vagy XML dokumentumokról. Ennek köszönhetően az alkalmazás üzleti logikája és az adatlekérdezések ugyanabban a programozási környezetben valósíthatók meg \cite{skeet2019csharp,freeman2010prolinq}.
 
-Ezen dokumentáció egy olyan fordító (transpiler) tervezését és megvalósítását mutatja be, amely SQL lekérdezések automatikus LINQ kifejezésekké alakítására képes. A projekt célja annak vizsgálata, hogy milyen módon valósítható meg egy ilyen fordító, milyen korlátok merülnek fel az SQL és LINQ közötti leképezés során, valamint milyen architekturális megoldások szükségesek egy ilyen rendszer létrehozásához.
+A különböző megközelítések közül jelen dokumentáció a LINQ alapú lekérdezések feldolgozásával és generálásával foglalkozik, mivel a .NET ökoszisztémában széles körben alkalmazott megoldást jelent, valamint jól vizsgálható rajta keresztül az SQL és a magasabb szintű programozási nyelvek közötti leképezés problémaköre.
 
-A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásának folyamata, az absztrakt szintaxisfa (Abstract Syntax Tree) alapú reprezentáció kialakítása, valamint a generált LINQ kód előállítása.
+A dokumentáció egy olyan fordító (transpiler) tervezését és megvalósítását mutatja be, amely SQL lekérdezések automatikus LINQ kifejezésekké alakítására képes \cite{nmorph2023}. A projekt célja annak vizsgálata, hogy milyen módon valósítható meg egy ilyen fordító, milyen korlátok merülnek fel az SQL és LINQ közötti leképezés során, valamint milyen architekturális megoldások szükségesek egy ilyen rendszer létrehozásához.
+
+A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásának folyamata, az absztrakt szintaxisfa (Abstract Syntax Tree) alapú reprezentáció kialakítása, valamint a generált LINQ kód előállítása \cite{parr2013antlr4}.
 
 \section{A probléma bemutatása}
+A szoftverfejlesztés során az egyik leggyakrabban felmerülő architekturális kihívás az objektum-relációs impedancia-eltérés (object-relational impedance mismatch). Ez a jelenség abból fakad, hogy a relációs adatbázisok és az objektumorientált programozási nyelvek alapvetően eltérő paradigmákra épülnek. Míg az SQL alapú rendszerek adathalmazokban, táblákban és sorokban tárolják az információt, addig a C\# és más modern objektumorientált nyelvek objektumokban, valamint memóriabeli referenciagráfokban gondolkodnak. Továbbá az SQL egy tisztán deklaratív nyelv, amely arra fókuszál, hogy mit akarunk lekérdezni, a végrehajtás pontos lépéseinek definiálása nélkül. Bár a LINQ bevezeti a deklaratív adatelérés kényelmét a C\# nyelvbe, alapvetően mégis egy típusbiztos, imperatív ökoszisztémába ágyazódik be, ahol a lekérdezések láncolt metódushívásokra épülnek.
+
+Ezen különbségek áthidalására a fejlesztők a múltban gyakran nyers SQL lekérdezéseket ágyaztak be az alkalmazás forráskódjába stringek formájában. Ez a megközelítés azonban komoly karbantarthatósági és biztonsági problémákkal járt. A beágyazott SQL stringek esetében a fordítóprogram (compiler) nem képes fordítási idejű (compile-time) szintaktikai vagy szemantikai ellenőrzést végezni. Ebből adódóan egy elgépelt oszlopnév vagy egy típusillesztési hiba kizárólag futásidőben (runtime) derül ki, ami jelentősen növeli a szoftver meghibásodásának kockázatát. Emellett az adatbázis-séma változásakor (például egy mező átnevezésekor) a modern integrált fejlesztőkörnyezetek (IDE) refaktoráló eszközei nem képesek automatikusan frissíteni a stringekben rejlő hivatkozásokat. Ezzel szemben a LINQ használatakor a típusos modelleken végzett módosítások a teljes lekérdezés-láncot automatikusan és biztonságosan frissítik \cite{skeet2019csharp}.
+
+Nagyobb méretű legacy rendszerek modernizálása során gyakori feladat a több ezer soros, elavult adatbázis-hívások átírása modern, Entity Framework Core alapú LINQ kifejezésekké. Ennek manuális elvégzése rendkívül időigényes, monoton és hibalehetőségekkel teli folyamat. A két nyelv szintaxisa és operátor-készlete közötti rejtett különbségek könnyen nehezen felderíthető logikai hibákhoz vezethetnek. Szemléletes példa erre a logikai operátorok precedenciájának eltérése: míg az SQL-ben a \texttt{NOT} operátor egyértelműen a teljes relációra vonatkoztatható anélkül, hogy típuskonfliktust okozna, addig a C\# \texttt{!} operátorának magasabb precedenciája miatt a kézi átírás során a megfelelő zárójelezés elhagyása azonnali fordítási hibát eredményezhet.
+
+Ezen karbantartási és migrációs problémák kiküszöbölésére hatékony megoldást jelenthet egy transpiler megtervezése és alkalmazása. Egy ilyen eszköz létrehozása azonban specifikus technológiai kihívásokat is tartogat. Mivel a két nyelv nem feleltethető meg egymásnak egy az egyben, a fordítónak intelligens módon kell áthidalnia a hiányosságokat. Nem minden SQL utasításnak vagy beépített adatbázis függvénynek van közvetlen C\# megfelelője. Például az SQL \texttt{LIKE} operátorának és helyettesítő karaktereinek transzpilálása komplex reguláris kifejezések (regexek) generálását igényeli. Továbbá a fordító által előállított LINQ kódnak nem csupán szintaktikailag kell helyesnek lennie, hanem illeszkednie kell az Entity Framework kifejezésfa (Expression Tree) kiértékelési mechanizmusaihoz is, elkerülve a nem támogatott szerveroldali fordításokat és a teljesítményt rontó kliensoldali adatfeldolgozást \cite{nmorph2023}.
 
 \section{Szakirodalmi áttekintés}
 
@@ -45,6 +57,6 @@ A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásána
 
 \section{Összegzés}
 
-\bibliography{irodalom}
+\bibliography{references}
 
 \end{document}
