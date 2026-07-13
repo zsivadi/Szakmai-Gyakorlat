@@ -4,6 +4,11 @@ namespace SqlToLinq.Cli {
     public static class SqlToLinqConverter {
 
         public static string Convert(string sqlInput) {
+            var (linqCode, _, _) = ConvertWithAst(sqlInput);
+            return linqCode;
+        }
+
+        public static (string LinqCode, string SqlAstDot, string LinqAstDot) ConvertWithAst(string sqlInput) {
 
             var inputStream = new AntlrInputStream(sqlInput);
 
@@ -18,11 +23,13 @@ namespace SqlToLinq.Cli {
             parser.AddErrorListener(ThrowingErrorListener.Instance);
 
             var tree = parser.query();
+            string sqlAstDot = AstVisualizer.ExportAntlrTreeToDot(tree, parser);
+
             var visitor = new SqlVisitor();
-
             LinqNode linqAst = visitor.Visit(tree);
+            string linqAstDot = AstVisualizer.ExportLinqAstToDot(linqAst);
 
-            return linqAst.ToCodeString();
+            return (linqAst.ToCodeString(), sqlAstDot, linqAstDot);
         }
     }
 }
