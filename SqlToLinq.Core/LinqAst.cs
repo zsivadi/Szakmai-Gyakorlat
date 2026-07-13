@@ -1,7 +1,7 @@
 using System.Linq;
 using System.Collections.Generic;
 
-namespace SqlToLinq.Cli {
+namespace SqlToLinq.Core {
 
     public abstract class LinqNode {
         public abstract string ToCodeString();

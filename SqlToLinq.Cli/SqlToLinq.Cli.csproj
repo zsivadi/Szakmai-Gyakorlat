@@ -19,18 +19,14 @@
   </ItemGroup>
   
   <ItemGroup>
-    <Antlr4 Include="SqlParser.g4">
-      <Visitor>True</Visitor>
-      <Listener>False</Listener>
-      <Namespace>SqlToLinq.Cli</Namespace>
-    </Antlr4>
+    <None Include="..\SqlToLinq.Tests\IOPairs.json">
+      <Link>IOPairs.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   
   <ItemGroup>
-  <None Include="..\SqlToLinq.Tests\IOPairs.json">
-    <Link>IOPairs.json</Link>
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  </None>
-</ItemGroup>
+    <ProjectReference Include="..\SqlToLinq.Core\SqlToLinq.Core.csproj" />
+  </ItemGroup>
 
 </Project>

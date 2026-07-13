@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using Antlr4.Runtime;
+using SqlToLinq.Core;
 using System.Text.Json;
 using System.Collections.Generic;
 
@@ -65,7 +65,7 @@ namespace SqlToLinq.Cli {
                 }
 
                 if (dumpAst) {
-                    Console.WriteLine($"[INFO] AST DOT fájlok kiírva ide: {Path.GetFullPath(astDir)}");
+                    Console.WriteLine($"[INFO] AST Files: {Path.GetFullPath(astDir)}");
                 }
             }
         }

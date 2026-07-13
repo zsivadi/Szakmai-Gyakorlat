@@ -6,7 +6,7 @@ using Antlr4.Runtime.Misc;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace SqlToLinq.Cli {
+namespace SqlToLinq.Core {
 
     public class SqlVisitor : SqlParserBaseVisitor<LinqNode> {
 

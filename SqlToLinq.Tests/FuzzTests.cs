@@ -2,7 +2,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using NUnit.Framework;
-using SqlToLinq.Cli;
+using SqlToLinq.Core;
 
 namespace SqlToLinq.Tests {
 

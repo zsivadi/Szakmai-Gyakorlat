@@ -1,12 +1,12 @@
-using Antlr4.Runtime;
-using Antlr4.Runtime.Tree;
-using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
+using Antlr4.Runtime;
+using System.Reflection;
+using System.Collections;
+using Antlr4.Runtime.Tree;
+using System.Collections.Generic;
 
-namespace SqlToLinq.Cli {
+namespace SqlToLinq.Core {
     public static class AstVisualizer {
         public static string ExportAntlrTreeToDot(IParseTree tree, Parser parser) {
 

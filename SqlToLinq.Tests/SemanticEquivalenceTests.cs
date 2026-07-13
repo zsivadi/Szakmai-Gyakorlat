@@ -1,14 +1,14 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Threading.Tasks;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.Data.Sqlite;
+using SqlToLinq.Core;
 using NUnit.Framework;
-using SqlToLinq.Cli;
+using System.Reflection;
+using System.Collections;
+using Microsoft.Data.Sqlite;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using Microsoft.CodeAnalysis.Scripting;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
 
 namespace SqlToLinq.Tests {
     

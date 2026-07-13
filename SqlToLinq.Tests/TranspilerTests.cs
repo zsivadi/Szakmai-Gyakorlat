@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using SqlToLinq.Cli;
+using SqlToLinq.Core;
 using Antlr4.Runtime;
 using NUnit.Framework;
 using System.Text.Json;

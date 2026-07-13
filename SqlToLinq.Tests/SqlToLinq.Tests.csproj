@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SqlToLinq.Cli\SqlToLinq.Cli.csproj" />
+    <ProjectReference Include="..\SqlToLinq.Core\SqlToLinq.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 using Antlr4.Runtime;
 
-namespace SqlToLinq.Cli {
+namespace SqlToLinq.Core {
     public static class SqlToLinqConverter {
 
         public static string Convert(string sqlInput) {
