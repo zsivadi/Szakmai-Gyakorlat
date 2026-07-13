@@ -45,11 +45,14 @@ orderItem    : expr (ASC | DESC)? ;
 
 
 
-condition : '(' condition ')'                          # parensCondition
-          | left=condition AND right=condition         # andCondition
-          | left=condition OR right=condition          # orCondition
-          | left=expr op=compOp right=expr             # compareCondition
-          | left=expr LIKE right=STRING_LITERAL        # likeCondition
+condition : '(' condition ')'                          		# parensCondition
+          | left=expr op=compOp right=expr             		# compareCondition
+          | left=expr LIKE right=STRING_LITERAL        		# likeCondition
+		  | NOT condition                                   # notCondition
+		  | left=expr NOT? LIKE right=STRING_LITERAL        # likeCondition
+		  | left=expr NOT? BETWEEN low=expr AND high=expr   # betweenCondition
+		  | left=condition AND right=condition         		# andCondition
+          | left=condition OR right=condition          		# orCondition
           ;
 
 expr : left=expr op=mathOp right=expr                  # mathExpr
@@ -84,11 +87,9 @@ ASC    : [Aa][Ss][Cc] ;
 DESC   : [Dd][Ee][Ss][Cc] ;
 HAVING : [Hh][Aa][Vv][Ii][Nn][Gg] ;
 AS     : [Aa][Ss] ;
-AVG    : [Aa][Vv][Gg] ;
-SUM    : [Ss][Uu][Mm] ;
-MIN    : [Mm][Ii][Nn] ;
-MAX    : [Mm][Aa][Xx] ;
 GROUP : [Gg][Rr][Oo][Uu][Pp] ;
+BETWEEN : [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
+NOT     : [Nn][Oo][Tt] ;
 
 
 
