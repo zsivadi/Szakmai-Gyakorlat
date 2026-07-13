@@ -175,6 +175,24 @@ namespace SqlToLinq.Cli {
                 }
             }
 
+            if (context.offsetClause() != null) {
+
+                var offsetExpr = Visit(context.offsetClause().expr());
+                var skipMethod = new LinqMethodCallNode { MethodName = "Skip" };
+
+                skipMethod.Arguments.Add(offsetExpr);
+                queryNode.Methods.Add(skipMethod);
+            }
+
+            if (context.limitClause() != null) {
+
+                var limitExpr = Visit(context.limitClause().expr());
+                var takeMethod = new LinqMethodCallNode { MethodName = "Take" };
+
+                takeMethod.Arguments.Add(limitExpr);
+                queryNode.Methods.Add(takeMethod);
+            }
+
             // Columns  
 
             var columnsNode = Visit(context.columnList());

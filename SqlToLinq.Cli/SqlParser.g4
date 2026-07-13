@@ -10,7 +10,8 @@ statement : selectStmt
 
 
 
-selectStmt : SELECT columnList FROM tableName (WHERE condition)? groupClause? havingClause? orderClause? ;
+selectStmt : SELECT columnList FROM tableName (WHERE condition)?
+			 groupClause? havingClause? orderClause? limitClause? offsetClause? ;
 
 updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
 
@@ -43,6 +44,10 @@ orderClause  : ORDER BY orderItem (COMMA orderItem)* ;
 
 orderItem    : expr (ASC | DESC)? ;
 
+limitClause  :LIMIT expr ;
+
+offsetClause : OFFSET expr ;
+
 
 
 condition : '(' condition ')'                          		# parensCondition
@@ -69,27 +74,29 @@ mathOp : PLUS | MINUS | STAR | DIV ;
 
 
 
-UPDATE : [Uu][Pp][Dd][Aa][Tt][Ee] ;
-SET    : [Ss][Ee][Tt] ;
-INSERT : [Ii][Nn][Ss][Ee][Rr][Tt] ;
-INTO   : [Ii][Nn][Tt][Oo] ;
-VALUES : [Vv][Aa][Ll][Uu][Ee][Ss] ;
-DELETE : [Dd][Ee][Ll][Ee][Tt][Ee] ;
-SELECT : [Ss][Ee][Ll][Ee][Cc][Tt] ;
-FROM   : [Ff][Rr][Oo][Mm] ;
-WHERE  : [Ww][Hh][Ee][Rr][Ee] ;
-AND    : [Aa][Nn][Dd] ;
-OR     : [Oo][Rr] ;
-LIKE   : [Ll][Ii][Kk][Ee] ;
-ORDER  : [Oo][Rr][Dd][Ee][Rr] ;
-BY     : [Bb][Yy] ;
-ASC    : [Aa][Ss][Cc] ;
-DESC   : [Dd][Ee][Ss][Cc] ;
-HAVING : [Hh][Aa][Vv][Ii][Nn][Gg] ;
-AS     : [Aa][Ss] ;
-GROUP : [Gg][Rr][Oo][Uu][Pp] ;
+UPDATE 	: [Uu][Pp][Dd][Aa][Tt][Ee] ;
+SET    	: [Ss][Ee][Tt] ;
+INSERT 	: [Ii][Nn][Ss][Ee][Rr][Tt] ;
+INTO   	: [Ii][Nn][Tt][Oo] ;
+VALUES 	: [Vv][Aa][Ll][Uu][Ee][Ss] ;
+DELETE 	: [Dd][Ee][Ll][Ee][Tt][Ee] ;
+SELECT 	: [Ss][Ee][Ll][Ee][Cc][Tt] ;
+FROM   	: [Ff][Rr][Oo][Mm] ;
+WHERE  	: [Ww][Hh][Ee][Rr][Ee] ;
+AND    	: [Aa][Nn][Dd] ;
+OR     	: [Oo][Rr] ;
+LIKE   	: [Ll][Ii][Kk][Ee] ;
+ORDER  	: [Oo][Rr][Dd][Ee][Rr] ;
+BY    	: [Bb][Yy] ;
+ASC  	: [Aa][Ss][Cc] ;
+DESC   	: [Dd][Ee][Ss][Cc] ;
+HAVING 	: [Hh][Aa][Vv][Ii][Nn][Gg] ;
+AS     	: [Aa][Ss] ;
+GROUP  	: [Gg][Rr][Oo][Uu][Pp] ;
 BETWEEN : [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
 NOT     : [Nn][Oo][Tt] ;
+LIMIT 	: [Ll][Ii][Mm][Ii][Tt] ;
+OFFSET	: [Oo][Ff][Ff][Ss][Ee][Tt] ;
 
 
 
