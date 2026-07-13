@@ -249,13 +249,13 @@
 		"Id": 42,
 		"Desc": "NOT operátor összetett zárójeles kifejezésre.",
 		"SqlInput": "SELECT * FROM Users WHERE NOT (Age < 18 OR Points < 10)",
-		"ExpectedLinq": "db.Users.Where(x => !(x.Age < 18 || x.Points < 10)).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !((x.Age < 18 || x.Points < 10))).ToList()"
 	},
 	{
 		"Id": 43,
 		"Desc": "NOT LIKE minta tagadása.",
 		"SqlInput": "SELECT * FROM Users WHERE Name NOT LIKE 'A%'",
-		"ExpectedLinq": "db.Users.Where(x => !System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !(System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\"))).ToList()"
 	},
 	{
 		"Id": 44,
@@ -346,5 +346,23 @@
 		"Desc": "NOT BETWEEN tagadás.",
 		"SqlInput": "SELECT * FROM Users WHERE Age NOT BETWEEN 20 AND 30",
 		"ExpectedLinq": "db.Users.Where(x => !(x.Age >= 20 && x.Age <= 30)).ToList()"
+	},
+	{
+		"Id": 59,
+		"Desc": "Lekérdezés csak limit-tel.",
+		"SqlInput": "SELECT * FROM Users LIMIT 5",
+		"ExpectedLinq": "db.Users.Take(5).ToList()"
+	},
+	{
+		"Id": 60,
+		"Desc": "Lekérdezés limit és offset párossal.",
+		"SqlInput": "SELECT * FROM Users LIMIT 10 OFFSET 20",
+		"ExpectedLinq": "db.Users.Skip(20).Take(10).ToList()"
+	},
+	{
+		"Id": 61,
+		"Desc": "Összetett lekérdezés rendezéssel és lapozással.",
+		"SqlInput": "SELECT Name FROM Users ORDER BY Age DESC LIMIT 10 OFFSET 5",
+		"ExpectedLinq": "db.Users.OrderByDescending(x => x.Age).Skip(5).Take(10).Select(x => new { Name = x.Name }).ToList()"
 	}
 ]

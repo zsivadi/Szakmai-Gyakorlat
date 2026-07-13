@@ -50,6 +50,10 @@ namespace SqlToLinq.Tests {
                 sql += $" ORDER BY {Pick(AllColumns)} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
             }
 
+            if (_rng.Next(2) == 0) {
+                sql += $" LIMIT {_rng.Next(1, 4)} {(_rng.Next(2) == 0 ? $"OFFSET {_rng.Next(1, 3)}" : "")}";
+            }
+
             return sql + ";";
         }
 
