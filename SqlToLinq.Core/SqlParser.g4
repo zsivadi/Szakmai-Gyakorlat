@@ -10,7 +10,7 @@ statement : selectStmt
 
 
 
-selectStmt : SELECT columnList FROM tableName (WHERE condition)?
+selectStmt : SELECT DISTINCT? columnList FROM tableName (WHERE condition)?
 			 groupClause? havingClause? orderClause? limitClause? offsetClause? ;
 
 updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
@@ -66,10 +66,17 @@ exprList : expr (COMMA expr)* ;
 
 expr : left=expr op=mathOp right=expr                 		# mathExpr
      | IDENTIFIER '(' (STAR | expr) ')'              		# aggregateExpr
+     | caseExpr                                       		# caseExprAlt
      | IDENTIFIER                                     		# columnExpr
      | NUMBER                                          		# numberExpr
      | STRING_LITERAL                                  		# stringExpr
      ;
+
+// CASE WHEN c1 THEN r1 WHEN c2 THEN r2 ELSE rn END
+// Both searched form (CASE WHEN condition THEN ...) and
+// simple form (CASE expr WHEN value THEN ...) are supported.
+
+caseExpr : CASE caseOperand=expr? (WHEN condition THEN expr)+ (ELSE elseExpr=expr)? END ;
 
 
 
@@ -99,6 +106,12 @@ AS     		: [Aa][Ss] ;
 GROUP  		: [Gg][Rr][Oo][Uu][Pp] ;
 BETWEEN 	: [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
 NOT     	: [Nn][Oo][Tt] ;
+DISTINCT	: [Dd][Ii][Ss][Tt][Ii][Nn][Cc][Tt] ;
+CASE		: [Cc][Aa][Ss][Ee] ;
+WHEN		: [Ww][Hh][Ee][Nn] ;
+THEN		: [Tt][Hh][Ee][Nn] ;
+ELSE		: [Ee][Ll][Ss][Ee] ;
+END			: [Ee][Nn][Dd] ;
 LIMIT 		: [Ll][Ii][Mm][Ii][Tt] ;
 OFFSET		: [Oo][Ff][Ff][Ss][Ee][Tt] ;
 IN      	: [Ii][Nn] ;

@@ -62,22 +62,27 @@ namespace SqlToLinq.Core {
                 .ToList();
         }
 
+        private Dictionary<string, string> BuildSelectAliases(SqlParserParser.ColumnListContext columnList) {
+
+            var aliases = new Dictionary<string, string>();
+
+            if (columnList == null || columnList.STAR() != null) return aliases;
+
+            foreach (var item in columnList.selectItem()) {
+                if (item.IDENTIFIER() != null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+                    string alias = ToPascalCase(item.IDENTIFIER().GetText());
+                    string original = ToPascalCase(colCtx.GetText());
+                    aliases[alias] = original;
+                }
+            }
+            return aliases;
+        }
+
         // SELECT statement processing
 
         public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
 
-            if (context.columnList() != null && context.columnList().STAR() == null) {
-                foreach (var item in context.columnList().selectItem()) {
-
-                    if (item.IDENTIFIER() != null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
-
-                        string aliasName = ToPascalCase(item.IDENTIFIER().GetText());
-                        string originalName = ToPascalCase(colCtx.GetText());
-
-                        _selectAliases[aliasName] = originalName;
-                    }
-                }
-            }
+            _selectAliases = BuildSelectAliases(context.columnList());
 
             // Table name 
 
@@ -242,6 +247,11 @@ namespace SqlToLinq.Core {
             // ToList() at the end
 
             if (!isGlobalSingleAggregate) {
+
+                if (context.DISTINCT() != null) {
+                    queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "Distinct" });
+                }
+
                 queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
             }
 
@@ -385,7 +395,7 @@ namespace SqlToLinq.Core {
             };
         }
 
-        // IS NULL / IS NOT NULL
+        // IS NULL / IS NOT NULL 
 
         public override LinqNode VisitIsNullCondition([NotNull] SqlParserParser.IsNullConditionContext context) {
             return new LinqBinaryExpressionNode {
@@ -407,13 +417,49 @@ namespace SqlToLinq.Core {
                 inNode.Values.Add(Visit(valueExpr));
             }
 
-            if (context.NOT() != null) return new LinqUnaryExpressionNode { Operator = "!", Operand = inNode };
+            if (context.NOT() != null) {
+                return new LinqUnaryExpressionNode { Operator = "!", Operand = inNode };
+            }
 
             return inNode;
         }
 
         public override LinqNode VisitBooleanColumnCondition([NotNull] SqlParserParser.BooleanColumnConditionContext context) {
             return Visit(context.expr());
+        }
+
+        // CASE WHEN 
+
+        public override LinqNode VisitCaseExprAlt([NotNull] SqlParserParser.CaseExprAltContext context) {
+            return Visit(context.caseExpr());
+        }
+
+        public override LinqNode VisitCaseExpr([NotNull] SqlParserParser.CaseExprContext context) {
+
+            var caseNode = new LinqCaseNode();
+
+            var allExprs = context.expr();
+            var conditions = context.condition();
+
+            bool hasOperand = context.caseOperand != null;
+            int thenOffset = hasOperand ? 1 : 0;
+
+            if (hasOperand) {
+                caseNode.Operand = Visit(allExprs[0]);
+            }
+
+            for (int i = 0; i < conditions.Length; i++) {
+                caseNode.WhenClauses.Add(new LinqCaseWhenClause {
+                    Condition = Visit(conditions[i]),
+                    Result = Visit(allExprs[thenOffset + i])
+                });
+            }
+
+            if (context.elseExpr != null) {
+                caseNode.ElseExpression = Visit(context.elseExpr);
+            }
+
+            return caseNode;
         }
 
         // AND condition processing, converting to C# "&&" operator

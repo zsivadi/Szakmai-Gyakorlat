@@ -100,14 +100,14 @@ namespace SqlToLinq.Core {
         }
     }
 
-    // IN (value list)
+    // IN 
 
     public class LinqInExpressionNode : LinqNode {
 
         public LinqNode Target { get; set; }
 
         public List<LinqNode> Values { get; set; } = new List<LinqNode>();
-            
+
         public override string ToCodeString() {
             var valuesStr = string.Join(", ", Values.Select(v => v.ToCodeString()));
             return $"new[] {{ {valuesStr} }}.Contains({Target.ToCodeString()})";
@@ -192,6 +192,44 @@ namespace SqlToLinq.Core {
             string escapedPattern = Pattern?.Replace("\\", "\\\\") ?? "";
 
             return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"(?i){escapedPattern}\")";
+        }
+    }
+
+    // CASE WHEN ... THEN ... ELSE ... END
+
+    public class LinqCaseWhenClause {
+        public LinqNode Condition { get; set; }
+        public LinqNode Result { get; set; }
+    }
+
+    public class LinqCaseNode : LinqNode {
+
+        public LinqNode Operand { get; set; }
+
+        public List<LinqCaseWhenClause> WhenClauses { get; set; } = new List<LinqCaseWhenClause>();
+
+        public LinqNode ElseExpression { get; set; }
+
+        public override string ToCodeString() {
+
+            string elseStr = ElseExpression != null ? ElseExpression.ToCodeString() : "null";
+            string result = elseStr;
+
+            for (int i = WhenClauses.Count - 1; i >= 0; i--) {
+
+                var clause = WhenClauses[i];
+                string condStr;
+
+                if (Operand != null) {
+                    condStr = $"{Operand.ToCodeString()} == {clause.Condition.ToCodeString()}";
+                } else {
+                    condStr = clause.Condition.ToCodeString();
+                }
+
+                result = $"{condStr} ? {clause.Result.ToCodeString()} : {result}";
+            }
+
+            return $"({result})";
         }
     }
 
