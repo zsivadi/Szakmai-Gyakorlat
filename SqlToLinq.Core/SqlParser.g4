@@ -50,21 +50,25 @@ offsetClause : OFFSET expr ;
 
 
 
-condition : '(' condition ')'                          		# parensCondition
-          | left=expr op=compOp right=expr             		# compareCondition
-          | left=expr LIKE right=STRING_LITERAL        		# likeCondition
-		  | NOT condition                                   # notCondition
-		  | left=expr NOT? LIKE right=STRING_LITERAL        # likeCondition
-		  | left=expr NOT? BETWEEN low=expr AND high=expr   # betweenCondition
-		  | left=condition AND right=condition         		# andCondition
-          | left=condition OR right=condition          		# orCondition
+condition : '(' condition ')'                                       # parensCondition
+          | left=expr op=compOp right=expr                          # compareCondition
+          | left=expr NOT? LIKE right=STRING_LITERAL                # likeCondition
+          | left=expr NOT? BETWEEN low=expr AND high=expr           # betweenCondition
+          | left=expr IS NOT? NULL_TOKEN                            # isNullCondition
+          | left=expr NOT? IN '(' exprList ')'                      # inCondition
+          | NOT condition                                           # notCondition
+          | left=condition AND right=condition                      # andCondition
+          | left=condition OR right=condition                       # orCondition
+          | expr                                                    # booleanColumnCondition
           ;
 
-expr : left=expr op=mathOp right=expr                  # mathExpr
-     | IDENTIFIER '(' (STAR | expr) ')'                # aggregateExpr
-     | IDENTIFIER                                      # columnExpr
-     | NUMBER                                          # numberExpr
-     | STRING_LITERAL                                  # stringExpr
+exprList : expr (COMMA expr)* ;
+
+expr : left=expr op=mathOp right=expr                 		# mathExpr
+     | IDENTIFIER '(' (STAR | expr) ')'              		# aggregateExpr
+     | IDENTIFIER                                     		# columnExpr
+     | NUMBER                                          		# numberExpr
+     | STRING_LITERAL                                  		# stringExpr
      ;
 
 
@@ -74,29 +78,32 @@ mathOp : PLUS | MINUS | STAR | DIV ;
 
 
 
-UPDATE 	: [Uu][Pp][Dd][Aa][Tt][Ee] ;
-SET    	: [Ss][Ee][Tt] ;
-INSERT 	: [Ii][Nn][Ss][Ee][Rr][Tt] ;
-INTO   	: [Ii][Nn][Tt][Oo] ;
-VALUES 	: [Vv][Aa][Ll][Uu][Ee][Ss] ;
-DELETE 	: [Dd][Ee][Ll][Ee][Tt][Ee] ;
-SELECT 	: [Ss][Ee][Ll][Ee][Cc][Tt] ;
-FROM   	: [Ff][Rr][Oo][Mm] ;
-WHERE  	: [Ww][Hh][Ee][Rr][Ee] ;
-AND    	: [Aa][Nn][Dd] ;
-OR     	: [Oo][Rr] ;
-LIKE   	: [Ll][Ii][Kk][Ee] ;
-ORDER  	: [Oo][Rr][Dd][Ee][Rr] ;
-BY    	: [Bb][Yy] ;
-ASC  	: [Aa][Ss][Cc] ;
-DESC   	: [Dd][Ee][Ss][Cc] ;
-HAVING 	: [Hh][Aa][Vv][Ii][Nn][Gg] ;
-AS     	: [Aa][Ss] ;
-GROUP  	: [Gg][Rr][Oo][Uu][Pp] ;
-BETWEEN : [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
-NOT     : [Nn][Oo][Tt] ;
-LIMIT 	: [Ll][Ii][Mm][Ii][Tt] ;
-OFFSET	: [Oo][Ff][Ff][Ss][Ee][Tt] ;
+UPDATE 		: [Uu][Pp][Dd][Aa][Tt][Ee] ;
+SET    		: [Ss][Ee][Tt] ;
+INSERT 		: [Ii][Nn][Ss][Ee][Rr][Tt] ;
+INTO   		: [Ii][Nn][Tt][Oo] ;
+VALUES 		: [Vv][Aa][Ll][Uu][Ee][Ss] ;
+DELETE 		: [Dd][Ee][Ll][Ee][Tt][Ee] ;
+SELECT 		: [Ss][Ee][Ll][Ee][Cc][Tt] ;
+FROM   		: [Ff][Rr][Oo][Mm] ;
+WHERE  		: [Ww][Hh][Ee][Rr][Ee] ;
+AND    		: [Aa][Nn][Dd] ;
+OR     		: [Oo][Rr] ;
+LIKE   		: [Ll][Ii][Kk][Ee] ;
+ORDER  		: [Oo][Rr][Dd][Ee][Rr] ;
+BY    		: [Bb][Yy] ;
+ASC  		: [Aa][Ss][Cc] ;
+DESC   		: [Dd][Ee][Ss][Cc] ;
+HAVING 		: [Hh][Aa][Vv][Ii][Nn][Gg] ;
+AS     		: [Aa][Ss] ;
+GROUP  		: [Gg][Rr][Oo][Uu][Pp] ;
+BETWEEN 	: [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
+NOT     	: [Nn][Oo][Tt] ;
+LIMIT 		: [Ll][Ii][Mm][Ii][Tt] ;
+OFFSET		: [Oo][Ff][Ff][Ss][Ee][Tt] ;
+IN      	: [Ii][Nn] ;
+IS      	: [Ii][Ss] ;
+NULL_TOKEN 	: [Nn][Uu][Ll][Ll] ;
 
 
 

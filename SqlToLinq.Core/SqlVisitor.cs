@@ -385,6 +385,37 @@ namespace SqlToLinq.Core {
             };
         }
 
+        // IS NULL / IS NOT NULL
+
+        public override LinqNode VisitIsNullCondition([NotNull] SqlParserParser.IsNullConditionContext context) {
+            return new LinqBinaryExpressionNode {
+                Left = Visit(context.left),
+                Operator = context.NOT() != null ? "!=" : "==",
+                Right = new LinqConstantNode { Value = null }
+            };
+        }
+
+        // IN 
+
+        public override LinqNode VisitInCondition([NotNull] SqlParserParser.InConditionContext context) {
+
+            var inNode = new LinqInExpressionNode {
+                Target = Visit(context.left)
+            };
+
+            foreach (var valueExpr in context.exprList().expr()) {
+                inNode.Values.Add(Visit(valueExpr));
+            }
+
+            if (context.NOT() != null) return new LinqUnaryExpressionNode { Operator = "!", Operand = inNode };
+
+            return inNode;
+        }
+
+        public override LinqNode VisitBooleanColumnCondition([NotNull] SqlParserParser.BooleanColumnConditionContext context) {
+            return Visit(context.expr());
+        }
+
         // AND condition processing, converting to C# "&&" operator
 
         public override LinqNode VisitAndCondition([NotNull] SqlParserParser.AndConditionContext context) {

@@ -100,6 +100,20 @@ namespace SqlToLinq.Core {
         }
     }
 
+    // IN (value list)
+
+    public class LinqInExpressionNode : LinqNode {
+
+        public LinqNode Target { get; set; }
+
+        public List<LinqNode> Values { get; set; } = new List<LinqNode>();
+            
+        public override string ToCodeString() {
+            var valuesStr = string.Join(", ", Values.Select(v => v.ToCodeString()));
+            return $"new[] {{ {valuesStr} }}.Contains({Target.ToCodeString()})";
+        }
+    }
+
     // Identifiers 
 
     public class LinqIdentifierNode : LinqNode {
@@ -165,19 +179,6 @@ namespace SqlToLinq.Core {
     }
 
 
-    public class LinqStringMethodCallNode : LinqNode {
-
-        public LinqNode Instance { get; set; }
-
-        public string MethodName { get; set; }
-
-        public LinqNode Argument { get; set; }
-
-        public override string ToCodeString() {
-            return $"{Instance.ToCodeString()}.{MethodName}({Argument.ToCodeString()})";
-        }
-    }
-
     // Regex for LIKE patterns
 
     public class LinqRegexMatchNode : LinqNode {
@@ -191,17 +192,6 @@ namespace SqlToLinq.Core {
             string escapedPattern = Pattern?.Replace("\\", "\\\\") ?? "";
 
             return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"(?i){escapedPattern}\")";
-        }
-    }
-
-    // GROUP BY
-
-    public class LinqGroupByNode : LinqNode {
-
-        public string KeySelector { get; set; }
-
-        public override string ToCodeString() {
-            return $".GroupBy(x => x.{KeySelector})";
         }
     }
 
