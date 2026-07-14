@@ -196,8 +196,24 @@ namespace SqlToLinq.Core {
             // Columns  
 
             var columnsNode = Visit(context.columnList());
+            bool isGlobalSingleAggregate = false;
 
-            if (columnsNode is LinqAnonymousObjectNode anonNode) {
+            if (!hasGroupBy && columnsNode is LinqAnonymousObjectNode globalAnonNode && globalAnonNode.Properties.Count == 1 && globalAnonNode.Properties[0].Expression is LinqAggregateNode globalAggNode) {
+
+                isGlobalSingleAggregate = true;
+
+                var aggMethod = new LinqMethodCallNode { MethodName = globalAggNode.FunctionName };
+
+                if (globalAggNode.Argument != null) {
+                    aggMethod.Arguments.Add(new LinqLambdaNode {
+                        ParameterName = "x",
+                        Body = globalAggNode.Argument
+                    });
+                }
+
+                queryNode.Methods.Add(aggMethod);
+
+            } else if (columnsNode is LinqAnonymousObjectNode anonNode) {
 
                 var selectMethod = new LinqMethodCallNode { MethodName = "Select" };
 
@@ -225,7 +241,9 @@ namespace SqlToLinq.Core {
 
             // ToList() at the end
 
-            queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
+            if (!isGlobalSingleAggregate) {
+                queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
+            }
 
             return queryNode;
         }
@@ -408,6 +426,7 @@ namespace SqlToLinq.Core {
 
         // Column expression processing, converting to C# property access, considering GROUP BY context
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
+
             string rawColumnName = ToPascalCase(context.GetText());
 
             if (_selectAliases.ContainsKey(rawColumnName)) {
@@ -431,10 +450,14 @@ namespace SqlToLinq.Core {
 
                         if (idNodes != null && idNodes.Length > 0) {
 
-                            string groupKey = ToPascalCase(idNodes[0].GetText());
+                            var groupKeys = idNodes.Select(id => ToPascalCase(id.GetText())).ToList();
 
-                            if (rawColumnName == groupKey) {
-                                return new LinqIdentifierNode { Name = "g.Key" };
+                            if (groupKeys.Contains(rawColumnName)) {
+                                if (groupKeys.Count == 1) {
+                                    return new LinqIdentifierNode { Name = "g.Key" };
+                                } else {
+                                    return new LinqIdentifierNode { Name = $"g.Key.{rawColumnName}" };
+                                }
                             }
                         }
                     }

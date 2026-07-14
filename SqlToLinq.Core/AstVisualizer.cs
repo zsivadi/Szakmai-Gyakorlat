@@ -35,23 +35,6 @@ namespace SqlToLinq.Core {
             return sb.ToString();
         }
 
-        public static string PrintAntlrTree(IParseTree tree, Parser parser) {
-
-            var sb = new StringBuilder();
-
-            void Walk(IParseTree node, int depth) {
-
-                sb.AppendLine(new string(' ', depth * 2) + Trees.GetNodeText(node, parser));
-
-                for (int i = 0; i < node.ChildCount; i++) {
-                    Walk(node.GetChild(i), depth + 1);
-                }
-            }
-
-            Walk(tree, 0);
-            return sb.ToString();
-        }
-
         public static string ExportLinqAstToDot(LinqNode root) {
 
             var sb = new StringBuilder();
@@ -74,25 +57,6 @@ namespace SqlToLinq.Core {
 
             Walk(root);
             sb.AppendLine("}");
-            return sb.ToString();
-        }
-
-        public static string PrintLinqAst(LinqNode root) {
-
-            var sb = new StringBuilder();
-
-            void Walk(LinqNode node, int depth) {
-
-                sb.AppendLine(new string(' ', depth * 2) + GetNodeLabel(node));
-
-                foreach (var (edgeLabel, child) in GetChildren(node)) {
-
-                    sb.AppendLine(new string(' ', (depth + 1) * 2) + $"[{edgeLabel}]");
-                    Walk(child, depth + 2);
-                }
-            }
-
-            Walk(root, 0);
             return sb.ToString();
         }
 
