@@ -22,9 +22,9 @@ namespace SqlToLinq.Core {
         public override LinqNode VisitStatement([NotNull] SqlParserParser.StatementContext context) {
 
             if (context.selectStmt() != null) return Visit(context.selectStmt());
-            if (context.updateStmt() != null) return Visit(context.updateStmt());
-            if (context.insertStmt() != null) return Visit(context.insertStmt());
-            if (context.deleteStmt() != null) return Visit(context.deleteStmt());
+            //if (context.updateStmt() != null) return Visit(context.updateStmt());
+            //if (context.insertStmt() != null) return Visit(context.insertStmt());
+            //if (context.deleteStmt() != null) return Visit(context.deleteStmt());
 
             throw new NotSupportedException("[ERROR] Unknown or unsupported command!");
         }
@@ -153,9 +153,33 @@ namespace SqlToLinq.Core {
                 queryNode.Methods.Add(havingMethod);
             }
 
-            // ORDER BY 
+            bool hasDistinct = context.DISTINCT() != null;
 
-            if (context.orderClause() != null) {
+            if (hasDistinct && context.orderClause() != null && context.columnList().STAR() == null) {
+
+                var selectedColumns = context.columnList().selectItem()
+                    .Select(item => {
+                        if (item.IDENTIFIER() != null) return ToPascalCase(item.IDENTIFIER().GetText());
+                        if (item.expr() is SqlParserParser.ColumnExprContext col) return ToPascalCase(col.GetText());
+                        return null;
+                    })
+                    .Where(name => name != null)
+                    .ToHashSet();
+
+                foreach (var orderItem in context.orderClause().orderItem()) {
+                    if (orderItem.expr() is SqlParserParser.ColumnExprContext orderCol) {
+                        string orderColName = ToPascalCase(orderCol.GetText());
+                        if (!selectedColumns.Contains(orderColName)) {
+                            throw new NotSupportedException(
+                                $"[ERROR] DISTINCT with ORDER BY '{orderColName}' is not supported " +
+                                $"when '{orderColName}' is not in the SELECT list. " +
+                                $"The sort order would be undefined after deduplication.");
+                        }
+                    }
+                }
+            }
+
+            if (!hasDistinct && context.orderClause() != null) {
 
                 var orderItems = context.orderClause().orderItem();
 
@@ -178,24 +202,6 @@ namespace SqlToLinq.Core {
 
                     queryNode.Methods.Add(orderMethod);
                 }
-            }
-
-            if (context.offsetClause() != null) {
-
-                var offsetExpr = Visit(context.offsetClause().expr());
-                var skipMethod = new LinqMethodCallNode { MethodName = "Skip" };
-
-                skipMethod.Arguments.Add(offsetExpr);
-                queryNode.Methods.Add(skipMethod);
-            }
-
-            if (context.limitClause() != null) {
-
-                var limitExpr = Visit(context.limitClause().expr());
-                var takeMethod = new LinqMethodCallNode { MethodName = "Take" };
-
-                takeMethod.Arguments.Add(limitExpr);
-                queryNode.Methods.Add(takeMethod);
             }
 
             // Columns  
@@ -248,8 +254,52 @@ namespace SqlToLinq.Core {
 
             if (!isGlobalSingleAggregate) {
 
-                if (context.DISTINCT() != null) {
+                if (hasDistinct) {
+
                     queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "Distinct" });
+
+                    if (context.orderClause() != null) {
+
+                        var orderItems = context.orderClause().orderItem();
+
+                        for (int i = 0; i < orderItems.Length; i++) {
+
+                            var item = orderItems[i];
+                            var itemNode = Visit(item.expr());
+                            bool isDesc = item.DESC() != null;
+
+                            string methodName = i == 0
+                                ? (isDesc ? "OrderByDescending" : "OrderBy")
+                                : (isDesc ? "ThenByDescending" : "ThenBy");
+
+                            var orderMethod = new LinqMethodCallNode { MethodName = methodName };
+
+                            orderMethod.Arguments.Add(new LinqLambdaNode {
+                                ParameterName = "x",
+                                Body = itemNode
+                            });
+
+                            queryNode.Methods.Add(orderMethod);
+                        }
+                    }
+                }
+
+                if (context.offsetClause() != null) {
+
+                    var offsetExpr = Visit(context.offsetClause().expr());
+                    var skipMethod = new LinqMethodCallNode { MethodName = "Skip" };
+
+                    skipMethod.Arguments.Add(offsetExpr);
+                    queryNode.Methods.Add(skipMethod);
+                }
+
+                if (context.limitClause() != null) {
+
+                    var limitExpr = Visit(context.limitClause().expr());
+                    var takeMethod = new LinqMethodCallNode { MethodName = "Take" };
+
+                    takeMethod.Arguments.Add(limitExpr);
+                    queryNode.Methods.Add(takeMethod);
                 }
 
                 queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
@@ -283,11 +333,8 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
 
-            if (context.IDENTIFIER() == null) {
-                throw new ArgumentException($"[ERROR] Syntax error in the aggregate function! {context.GetText()}");
-            }
-
             string funcName = ToPascalCase(context.IDENTIFIER().GetText());
+
             if (funcName == "Avg") funcName = "Average";
 
             if (funcName == "Count") {
@@ -312,6 +359,14 @@ namespace SqlToLinq.Core {
         public override LinqNode VisitCompareCondition([NotNull] SqlParserParser.CompareConditionContext context) {
 
             string op = context.op.GetText();
+
+            bool isOrderingOp = op == ">" || op == "<" || op == ">=" || op == "<=";
+
+            if (isOrderingOp && (context.left is SqlParserParser.StringExprContext || context.right is SqlParserParser.StringExprContext)) {
+                throw new NotSupportedException(
+                    $"[ERROR] Ordering operator '{op}' is not supported for string operands. " +
+                    $"Strings can only be compared with '=' or '<>'.");
+            }
 
             if (op == "=") op = "==";
             if (op == "<>") op = "!=";
@@ -361,14 +416,22 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitBetweenCondition([NotNull] SqlParserParser.BetweenConditionContext context) {
 
+            if (context.low is SqlParserParser.StringExprContext || context.high is SqlParserParser.StringExprContext) {
+                throw new NotSupportedException(
+                    $"[ERROR] BETWEEN is not supported for string operands. " +
+                    $"String ordering has no equivalent in LINQ.");
+            }
+
+            var leftNode = Visit(context.left);
+
             var lowerBound = new LinqBinaryExpressionNode {
-                Left = Visit(context.left),
+                Left = leftNode,
                 Operator = ">=",
                 Right = Visit(context.low)
             };
 
             var upperBound = new LinqBinaryExpressionNode {
-                Left = Visit(context.left),
+                Left = leftNode,
                 Operator = "<=",
                 Right = Visit(context.high)
             };

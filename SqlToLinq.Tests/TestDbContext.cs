@@ -19,7 +19,7 @@ namespace SqlToLinq.Tests {
         private readonly SqliteConnection _connection;
 
         public TestDbContext(SqliteConnection connection) {
-            _connection = connection;
+            _connection = connection; 
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {

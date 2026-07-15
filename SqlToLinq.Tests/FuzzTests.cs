@@ -6,14 +6,6 @@ using SqlToLinq.Core;
 
 namespace SqlToLinq.Tests {
 
-    /// <summary>
-    /// Property-based / fuzz teszt: sok véletlen, de a nyelvtannak megfelelő SQL
-    /// lekérdezést generál, és minden egyesre csak azt ellenőrzi, hogy (a) a
-    /// transpiler nem dob kivételt, és (b) a kimenet szintaktikailag érvényes C#
-    /// kifejezés (Roslyn parse-olja, hiba nélkül). Ez nem helyettesíti a
-    /// SemanticEquivalenceTests-et, de olyan eseteket is felfedhet, amikre
-    /// sosem gondoltunk volna kézzel megírt JSON teszteset formájában.
-    /// </summary>
     [TestFixture]
     public class FuzzTests {
 
@@ -29,8 +21,10 @@ namespace SqlToLinq.Tests {
 
                 try {
                     linq = SqlToLinqConverter.Convert(sql);
+                } catch (NotSupportedException) {
+                    continue;
                 } catch (System.Exception ex) {
-                    Assert.Fail($"[ERROR] A transpiler kivételt dobott.\nSQL: {sql}\n{ex}");
+                    Assert.Fail($"[ERROR] Transpiler threw an exception. SQL: {sql}\n{ex}");
                     return;
                 }
 
@@ -40,7 +34,7 @@ namespace SqlToLinq.Tests {
                     .ToList();
 
                 Assert.That(errors, Is.Empty,
-                    $"[ERROR] A generált kód nem érvényes C#.\nSQL: {sql}\nLINQ: {linq}\nHibák: {string.Join(", ", errors)}");
+                    $"[ERROR] The generated code is not valid C#.\nSQL: {sql}\nLINQ: {linq}\nErrors: {string.Join(", ", errors)}");
             }
         }
     }

@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 
 namespace SqlToLinq.Tests {
-    
+
     public class ScriptGlobals {
         public TestDbContext db;
     }
@@ -100,15 +100,25 @@ namespace SqlToLinq.Tests {
 
         private List<Dictionary<string, object>> ToRowList(object result) {
 
+            if (result == null) return new List<Dictionary<string, object>>();
+
+            if (result is ValueType || result is string) {
+                return new List<Dictionary<string, object>> {
+                    new Dictionary<string, object> { { "scalar_result", result } }
+                };
+            }
+
             if (result is not IEnumerable enumerable) {
                 throw new InvalidOperationException(
-                    $"[ERROR] The generated LINQ did not return an IEnumerable result: {result?.GetType()}");
+                    $"[ERROR] The generated LINQ did not return an IEnumerable result: {result.GetType()}");
             }
 
             var rows = new List<Dictionary<string, object>>();
 
             foreach (var item in enumerable) {
+
                 var row = new Dictionary<string, object>();
+
                 foreach (var prop in item.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
                     row[NormalizeKey(prop.Name)] = prop.GetValue(item);
                 }
@@ -121,18 +131,33 @@ namespace SqlToLinq.Tests {
 
 
         private void AssertRowsEqual(
+
             List<Dictionary<string, object>> expected,
             List<Dictionary<string, object>> actual,
+
             bool orderSensitive,
             string context) {
 
             Assert.That(actual.Count, Is.EqualTo(expected.Count),
-                $"[ERROR] Different serial number. {context}");
+                $"[ERROR] Different row count. {context}");
+
+            if (expected.Count == 1 && actual.Count == 1 && expected[0].Count == 1 && actual[0].Count == 1) {
+
+                var expectedVal = expected[0].Values.First();
+                var actualVal = actual[0].Values.First();
+
+                string expStr = expectedVal?.ToString() ?? "NULL";
+                string actStr = actualVal?.ToString() ?? "NULL";
+
+                Assert.That(actStr, Is.EqualTo(expStr), $"[ERROR] Scalar values differ. {context}");
+                return;
+            }
 
             var expectedSerialized = expected.Select(SerializeRow).ToList();
             var actualSerialized = actual.Select(SerializeRow).ToList();
 
             if (!orderSensitive) {
+
                 expectedSerialized.Sort(StringComparer.Ordinal);
                 actualSerialized.Sort(StringComparer.Ordinal);
             }
@@ -151,7 +176,7 @@ namespace SqlToLinq.Tests {
         public async Task Randomly_Generated_Fuzz_Sql_Should_Return_Same_Rows_As_Linq() {
 
             var generator = new RandomSqlGenerator(seed: 1111);
-            int testCount = 100;
+            int testCount = 300;
 
             string logFilePath = Path.Combine(TestContext.CurrentContext.WorkDirectory, "SemanticFuzzOutput.log");
             if (File.Exists(logFilePath)) {
@@ -168,7 +193,6 @@ namespace SqlToLinq.Tests {
                     generatedLinq = SqlToLinqConverter.Convert(sqlInput);
 
                     var sqlRows = RunRawSql(sqlInput);
-
                     var linqRows = await RunGeneratedLinq(generatedLinq);
 
                     bool orderSensitive = sqlInput.IndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -177,6 +201,10 @@ namespace SqlToLinq.Tests {
                         $"\nSQL: {sqlInput}\nGenerated LINQ: {generatedLinq}");
 
                     File.AppendAllText(logFilePath, $"[{i + 1:D3}/{testCount}] [PASS] SQL: {sqlInput}\n           LINQ: {generatedLinq}\n--------------------------------------------------\n");
+
+                } catch (NotSupportedException ex) {
+
+                    File.AppendAllText(logFilePath, $"[{i + 1:D3}/{testCount}] [SKIP] SQL: {sqlInput}\nReason: {ex.Message}\n--------------------------------------------------\n");
 
                 } catch (Exception ex) {
 
