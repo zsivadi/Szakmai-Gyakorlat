@@ -570,9 +570,75 @@
 		"ExpectedLinq": "db.Users.OrderBy(x => (x.Role == \"Admin\" ? 0 : 1)).Select(x => new { Name = x.Name }).ToList()"
 	},
 	{
-		"Id": 95,
-		"Desc": "CASE WHEN ORDER BY-ban.",
-		"SqlInput": "SELECT Name FROM Users ORDER BY CASE WHEN Role = 'Admin' THEN 0 ELSE 1 END",
-		"ExpectedLinq": "db.Users.OrderBy(x => (x.Role == \"Admin\" ? 0 : 1)).Select(x => new { Name = x.Name }).ToList()"
+		"Id": 96,
+		"Desc": "UPPER függvény WHERE-ben.",
+		"SqlInput": "SELECT * FROM Users WHERE UPPER(Name) = 'ALICE'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.ToUpper() == \"ALICE\").ToList()"
+	},
+	{
+		"Id": 97,
+		"Desc": "LOWER függvény WHERE-ben.",
+		"SqlInput": "SELECT * FROM Users WHERE LOWER(Name) = 'alice'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.ToLower() == \"alice\").ToList()"
+	},
+	{
+		"Id": 98,
+		"Desc": "UPPER függvény SELECT-ben aliassal.",
+		"SqlInput": "SELECT UPPER(Name) AS UpperName FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { UpperName = x.Name.ToUpper() }).ToList()"
+	},
+	{
+		"Id": 99,
+		"Desc": "LOWER függvény SELECT-ben aliassal.",
+		"SqlInput": "SELECT LOWER(Role) AS LowerRole FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { LowerRole = x.Role.ToLower() }).ToList()"
+	},
+	{
+		"Id": 100,
+		"Desc": "TRIM függvény WHERE-ben.",
+		"SqlInput": "SELECT * FROM Users WHERE TRIM(Name) = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.Trim() == \"Bob\").ToList()"
+	},
+	{
+		"Id": 101,
+		"Desc": "LENGTH függvény WHERE-ben.",
+		"SqlInput": "SELECT * FROM Users WHERE LENGTH(Name) > 3",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.Length > 3).ToList()"
+	},
+	{
+		"Id": 102,
+		"Desc": "LENGTH függvény SELECT-ben.",
+		"SqlInput": "SELECT Name, LENGTH(Name) AS NameLength FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Name = x.Name, NameLength = x.Name.Length }).ToList()"
+	},
+	{
+		"Id": 103,
+		"Desc": "SUBSTRING függvény SELECT-ben.",
+		"SqlInput": "SELECT SUBSTRING(Name, 1, 3) AS Short FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Short = x.Name.Substring(1 - 1, 3) }).ToList()"
+	},
+	{
+		"Id": 104,
+		"Desc": "COALESCE NULL helyettesítés.",
+		"SqlInput": "SELECT COALESCE(Role, 'Ismeretlen') AS SafeRole FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { SafeRole = (x.Role ?? \"Ismeretlen\") }).ToList()"
+	},
+	{
+		"Id": 105,
+		"Desc": "NULLIF egyenlő értékek esetén null-t ad.",
+		"SqlInput": "SELECT NULLIF(Role, 'Guest') AS FilteredRole FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { FilteredRole = (x.Role == \"Guest\" ? null : x.Role) }).ToList()"
+	},
+	{
+		"Id": 106,
+		"Desc": "UPPER WHERE-ben LIKE-kal kombinálva.",
+		"SqlInput": "SELECT * FROM Users WHERE UPPER(Name) LIKE 'A%'",
+		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name.ToUpper(), \"(?i)^A.*$\")).ToList()"
+	},
+	{
+		"Id": 107,
+		"Desc": "LENGTH WHERE-ben és rendezés.",
+		"SqlInput": "SELECT Name FROM Users WHERE LENGTH(Name) >= 3 ORDER BY LENGTH(Name) DESC",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.Length >= 3).OrderByDescending(x => x.Name.Length).Select(x => new { Name = x.Name }).ToList()"
 	}
 ]
