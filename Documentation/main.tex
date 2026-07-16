@@ -1,16 +1,19 @@
 \documentclass[a4paper,12pt]{article}
-
+ 
 \usepackage{hyphenat}
-
+ 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[hungarian]{babel}
-
+ 
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{microtype}
-
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{longtable}
+ 
 \bibliographystyle{plain}
 
 \title{SQL-LINQ forráskód fordító dokumentáció}
@@ -26,9 +29,10 @@
 \newpage
 
 \section{Bevezetés}
+
 A modern szoftverrendszerek jelentős része valamilyen adatbázis-kezelő rendszert használ az adatok tárolására és lekérdezésére. Az adatbázisok kezelésének egyik legelterjedtebb eszköze az SQL (Structured Query Language), amely deklaratív módon teszi lehetővé az adatok lekérdezését és módosítását. Az SQL széles körben alkalmazott technológia, amely mára az adatbázis-kezelő rendszerek alapvető lekérdezési nyelve.
 
-A modern objektumorientált programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. Erre a problémára különböző programozási nyelvek és platformok eltérő megoldásokat kínálnak. A Java környezetben például a Stream API biztosít lehetőséget kollekciók deklaratív feldolgozására, míg a funkcionális programozási nyelvekben, mint például a Scala vagy a Kotlin, a beépített kollekcióműveletek hasonló szemléletet követnek. Ezek a megoldások lehetővé teszik az adatok feldolgozásának kifejezését deklaratív módon.
+A modern programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. Erre a problémára különböző programozási nyelvek eltérő megoldásokat kínálnak. A Java környezetben például a Stream API biztosít lehetőséget kollekciók deklaratív feldolgozására, míg a funkcionális programozási nyelvekben, mint például a Scala vagy a Kotlin, a beépített kollekcióműveletek hasonló szemléletet követnek. Ezek a megoldások lehetővé teszik az adatok feldolgozásának kifejezését deklaratív módon.
 
 A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely a lekérdezési lehetőségeket közvetlenül a programozási nyelv szintaxisába integrálja. A LINQ lehetővé teszi, hogy a fejlesztők egységes módon kezeljék a különböző adatforrásokból származó adatokat, legyen szó objektumgyűjteményekről, adatbázisokról vagy XML dokumentumokról. Ennek köszönhetően az alkalmazás üzleti logikája és az adatlekérdezések ugyanabban a programozási környezetben valósíthatók meg \cite{skeet2019csharp,freeman2010prolinq}.
 
@@ -39,9 +43,59 @@ A dokumentáció egy olyan fordító (transpiler) tervezését és megvalósít�
 A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásának folyamata, az absztrakt szintaxisfa (Abstract Syntax Tree) alapú reprezentáció kialakítása, valamint a generált LINQ kód előállítása \cite{parr2013antlr4}.
 
 \section{A probléma bemutatása}
-A szoftverfejlesztés során az egyik leggyakrabban felmerülő architekturális kihívás az objektum-relációs impedancia-eltérés (object-relational impedance mismatch). Ez a jelenség abból fakad, hogy a relációs adatbázisok és az objektumorientált programozási nyelvek alapvetően eltérő paradigmákra épülnek. Míg az SQL alapú rendszerek adathalmazokban, táblákban és sorokban tárolják az információt, addig a C\# és más modern objektumorientált nyelvek objektumokban, valamint memóriabeli referenciagráfokban gondolkodnak. Továbbá az SQL egy tisztán deklaratív nyelv, amely arra fókuszál, hogy mit akarunk lekérdezni, a végrehajtás pontos lépéseinek definiálása nélkül. Bár a LINQ bevezeti a deklaratív adatelérés kényelmét a C\# nyelvbe, alapvetően mégis egy típusbiztos, imperatív ökoszisztémába ágyazódik be, ahol a lekérdezések láncolt metódushívásokra épülnek.
+
+\subsection{Az objektum-relációs impedancia-eltérés}
+
+A szoftverfejlesztés során az egyik leggyakrabban felmerülő architekturális kihívás az objektum-relációs impedancia-eltérés (object-relational impedance mismatch). Ez a jelenség abból fakad, hogy a relációs adatbázisok és az objektumorientált programozási nyelvek alapvetően eltérő paradigmákra épülnek. Míg az SQL alapú rendszerek adathalmazokban, táblákban és sorokban tárolják az információt, addig a C\# és más modern objektumorientált nyelvek objektumokban, valamint memóriabeli referenciagráfokban gondolkodnak \cite{skeet2019csharp}. 
+
+Az SQL egy tisztán deklaratív nyelv, amely arra fókuszál, hogy \emph{mit} akarunk lekérdezni, a végrehajtás pontos lépéseinek definiálása nélkül. Bár a LINQ bevezeti a deklaratív adatelérés kényelmét a C\# nyelvbe, alapvetően mégis egy típusbiztos, imperatív ökoszisztémába ágyazódik be, ahol a lekérdezések láncolt metódushívásokra épülnek.
+
+\subsection{Az adatbázis-elérés megközelítései}
+
+Az adatbázis-elérés különböző módszereit az alábbi táblázat foglalja össze, az egyszerűbbtől a magasabb szintű absztrakció felé haladva:
+ 
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\small
+\begin{tabular}{|p{0.19\textwidth}|p{0.28\textwidth}|p{0.37\textwidth}|}
+\hline
+\textbf{Megközelítés} & \textbf{Jellemző} & \textbf{Példa} \\
+\hline
+Nyers SQL string & Fordítási idejű ellenőrzés nélkül, SQL injekció veszélyével &
+  \texttt{"SELECT * FROM Users} \newline \texttt{WHERE Id = " + id} \\
+\hline
+Paraméteres SQL & Biztonságos, de string alapú, sémaváltozásra érzékeny &
+  \texttt{"SELECT * FROM Users} \newline \texttt{WHERE Id = @id"} \\
+\hline
+Micro-ORM (Dapper) & SQL stringek erős típusmegfeleltetéssel &
+  \texttt{conn.Query<User>(} \newline \texttt{"SELECT ...",} \newline \texttt{new \{ Id = id \})} \\
+\hline
+LINQ + EF Core & Típusbiztos, fordítási idejű ellenőrzéssel, refaktorálható &
+  \texttt{db.Users} \newline \texttt{.Where(x => x.Id == id)} \newline \texttt{.ToList()} \\
+\hline
+\end{tabular}
+\end{center}
 
 Ezen különbségek áthidalására a fejlesztők a múltban gyakran nyers SQL lekérdezéseket ágyaztak be az alkalmazás forráskódjába stringek formájában. Ez a megközelítés azonban komoly karbantarthatósági és biztonsági problémákkal járt. A beágyazott SQL stringek esetében a fordítóprogram (compiler) nem képes fordítási idejű (compile-time) szintaktikai vagy szemantikai ellenőrzést végezni. Ebből adódóan egy elgépelt oszlopnév vagy egy típusillesztési hiba kizárólag futásidőben (runtime) derül ki, ami jelentősen növeli a szoftver meghibásodásának kockázatát. Emellett az adatbázis-séma változásakor (például egy mező átnevezésekor) a modern integrált fejlesztőkörnyezetek (IDE) refaktoráló eszközei nem képesek automatikusan frissíteni a stringekben rejlő hivatkozásokat. Ezzel szemben a LINQ használatakor a típusos modelleken végzett módosítások a teljes lekérdezés-láncot automatikusan és biztonságosan frissítik \cite{skeet2019csharp}.
+
+\subsection{Az SQL és LINQ típusrendszerének kapcsolata}
+
+A LINQ kétféle szintaxisban írható fel: lekérdezési szintaxisban (\emph{query syntax}), amely az SQL-hez hasonló kulcsszavakat használ, és metódusszintaxisban (\emph{method syntax}), amely láncolt metódushívásokból áll. A transzpiler az utóbbit generálja, mivel az programozottan könnyebben állítható elő. A lekérdezési lánc általános alakja:
+ 
+\begin{center}
+\texttt{db.Tabla}\\
+\texttt{\ \ .Where(x => \emph{feltétel})}\\
+\texttt{\ \ .GroupBy(x => x.\emph{Kulcs})}\\
+\texttt{\ \ .OrderBy(x => x.\emph{Oszlop})}\\
+\texttt{\ \ .Select(x => new \{ \emph{oszlopok} \})}\\
+\texttt{\ \ .Take(\emph{n})}\\
+\texttt{\ \ .ToList();}
+\end{center}
+ 
+A lánc sorrendje nem tetszőleges: a LINQ kiértékelési szemantikája megköveteli, hogy a szűrés (\texttt{Where}) a vetítés (\texttt{Select}) előtt, a lapozás (\texttt{Take}/\texttt{Skip}) pedig az összes többi művelet után következzen. Ez tükrözi az SQL végrehajtási sorrendjét: 
+\texttt{FROM} $\to$ \texttt{WHERE} $\to$ \texttt{GROUP BY} $\to$ \texttt{HAVING} $\to$ \texttt{SELECT} $\to$ \texttt{DISTINCT} $\to$ \texttt{ORDER BY} $\to$ \texttt{LIMIT}.
+
+\subsection{A manuális átírás problémái}
 
 Nagyobb méretű legacy rendszerek modernizálása során gyakori feladat a több ezer soros, elavult adatbázis-hívások átírása modern, Entity Framework Core alapú LINQ kifejezésekké. Ennek manuális elvégzése rendkívül időigényes, monoton és hibalehetőségekkel teli folyamat. A két nyelv szintaxisa és operátor-készlete közötti rejtett különbségek könnyen nehezen felderíthető logikai hibákhoz vezethetnek. Szemléletes példa erre a logikai operátorok precedenciájának eltérése: míg az SQL-ben a \texttt{NOT} operátor egyértelműen a teljes relációra vonatkoztatható anélkül, hogy típuskonfliktust okozna, addig a C\# \texttt{!} operátorának magasabb precedenciája miatt a kézi átírás során a megfelelő zárójelezés elhagyása azonnali fordítási hibát eredményezhet.
 
@@ -52,6 +106,67 @@ Ezen karbantartási és migrációs problémák kiküszöbölésére hatékony m
 \section{Tervezés}
 
 \section{Megvalósítás}
+
+\begin{longtable}{|l|p{0.42\textwidth}|p{0.2\textwidth}|}
+\hline
+\textbf{SQL} & \textbf{Generált LINQ} & \textbf{Megjegyzés} \\
+\hline
+\endfirsthead
+\multicolumn{3}{l}{\small\textit{(folytatás az előző oldalról)}} \\
+\hline
+\textbf{SQL} & \textbf{Generált LINQ} & \textbf{Megjegyzés} \\
+\hline
+\endhead
+\hline
+\multicolumn{3}{r}{\small\textit{(folytatás a következő oldalon)}} \\
+\endfoot
+\hline
+\endlastfoot
+\multicolumn{3}{|l|}{\textit{Záradékok}} \\
+\hline
+\texttt{SELECT *}                & \texttt{.ToList()}                                  & Vetítés nélkül \\
+\texttt{SELECT col1, col2}       & \texttt{.Select(x => new \{ col1, col2 \})}         & Anonim típus \\
+\texttt{SELECT DISTINCT}         & \texttt{.Select(...).Distinct()}                    & Vetítés után \\
+\texttt{WHERE cond}              & \texttt{.Where(x => cond)}                          & \\
+\texttt{GROUP BY col}            & \texttt{.GroupBy(x => x.Col)}                       & \\
+\texttt{HAVING cond}             & \texttt{.Where(g => cond)}                          & GroupBy után \\
+\texttt{ORDER BY col ASC}        & \texttt{.OrderBy(x => x.Col)}                       & \\
+\texttt{ORDER BY col DESC}       & \texttt{.OrderByDescending(x => x.Col)}             & \\
+\texttt{ORDER BY c1, c2}         & \texttt{.OrderBy(...).ThenBy(...)}                  & \\
+\texttt{LIMIT n}                 & \texttt{.Take(n)}                                   & OrderBy után \\
+\texttt{OFFSET n}                & \texttt{.Skip(n)}                                   & Take előtt \\
+\hline
+\multicolumn{3}{|l|}{\textit{Összehasonlító operátorok}} \\
+\hline
+\texttt{=} / \texttt{<>}        & \texttt{==} / \texttt{!=}                           & \\
+\texttt{>} / \texttt{>=}        & \texttt{>} / \texttt{>=}                            &  \\
+\texttt{<} / \texttt{<=}        & \texttt{<} / \texttt{<=}                            &  \\
+\hline
+\multicolumn{3}{|l|}{\textit{Logikai operátorok}} \\
+\hline
+\texttt{AND} / \texttt{OR}      & \texttt{\&\&} / \texttt{||}                         & \\
+\texttt{NOT felt}               & \texttt{!(felt)}                                    & \\
+\hline
+\multicolumn{3}{|l|}{\textit{Feltételek}} \\
+\hline
+\texttt{LIKE 'A\%'}             & \texttt{Regex.IsMatch(col, "(?i)\^{}A.*\$")}        & Kis-nagybetű független \\
+\texttt{NOT LIKE 'A\%'}         & \texttt{!Regex.IsMatch(col, "(?i)\^{}A.*\$")}       & \\
+\texttt{BETWEEN a AND b}        & \texttt{col >= a \&\& col <= b}                     & Csak numerikus \\
+\texttt{NOT BETWEEN a AND b}    & \texttt{!(col >= a \&\& col <= b)}                  & \\
+\texttt{IN (v1, v2)}            & \texttt{new[]\{v1,v2\}.Contains(col)}               & \\
+\texttt{NOT IN (v1, v2)}        & \texttt{!new[]\{v1,v2\}.Contains(col)}              & \\
+\texttt{IS NULL}                & \texttt{col == null}                                & \\
+\texttt{IS NOT NULL}            & \texttt{col != null}                                & \\
+\hline
+\multicolumn{3}{|l|}{\textit{Kifejezések}} \\
+\hline
+\texttt{+} / \texttt{-} / \texttt{*} / \texttt{/} & \texttt{+} / \texttt{-} / \texttt{*} / \texttt{/} & \\
+\texttt{COUNT(*)}               & \texttt{g.Count()}                                  & \\
+\texttt{SUM(col)}               & \texttt{g.Sum(x => x.Col)}                          & \\
+\texttt{MIN(col) / MAX(col)}    & \texttt{g.Min(x => x.Col) / g.Max(x => x.Col)}     & \\
+\texttt{CASE WHEN f THEN r}     & \texttt{(f ? r : e)}                                & Beágyazott ternáris \\
+\texttt{col AS alias}           & \texttt{alias = x.Col}                              & Anonim típusban \\
+\end{longtable}
 
 \section{Tesztelés}
 
