@@ -14,6 +14,7 @@ namespace SqlToLinq.Core {
         private bool _inAggregate = false;
 
         private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
+        private Dictionary<string, string> _tableAliases = new Dictionary<string, string>();
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
             return Visit(context.statement());
@@ -84,11 +85,89 @@ namespace SqlToLinq.Core {
 
             _selectAliases = BuildSelectAliases(context.columnList());
 
-            // Table name 
+            // FROM clause: base table + optional joins
 
-            var queryNode = new LinqQueryNode {
-                SourceTable = ToPascalCase(context.tableName().GetText())
-            };
+            var fromCtx = context.fromClause();
+            var baseRef = fromCtx.tableRef();
+
+            string baseTable = ToPascalCase(baseRef.tableName().GetText());
+            string baseAlias = baseRef.alias() != null
+                ? baseRef.alias().GetText()
+                : baseTable.Substring(0, 1).ToLower();
+
+            _tableAliases.Clear();
+            _tableAliases[baseAlias] = baseTable;
+
+            var queryNode = new LinqQueryNode { SourceTable = baseTable };
+
+            // JOIN
+
+            foreach (var joinCtx in fromCtx.joinClause()) {
+
+                var joinRef = joinCtx.tableRef();
+
+                string joinTable = ToPascalCase(joinRef.tableName().GetText());
+                string joinAlias = joinRef.alias() != null
+                    ? joinRef.alias().GetText()
+                    : joinTable.Substring(0, 1).ToLower();
+
+                _tableAliases[joinAlias] = joinTable;
+
+                bool isCross = joinCtx.joinType() != null && joinCtx.joinType().CROSS() != null;
+
+                if (isCross) {
+                    queryNode.Methods.Add(new LinqCrossJoinNode {
+                        InnerTable = joinTable,
+                        OuterParam = baseAlias,
+                        InnerParam = joinAlias,
+                    });
+                } else {
+
+                    var onCondition = joinCtx.condition();
+                    if (onCondition is SqlParserParser.CompareConditionContext cmpCtx
+                        && cmpCtx.op.GetText() == "=") {
+
+                        string LeftAlias() =>
+                            cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq
+                                ? lq.IDENTIFIER(0).GetText()
+                                : null;
+
+                        string RightAlias() =>
+                            cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq
+                                ? rq.IDENTIFIER(0).GetText()
+                                : null;
+
+                        LinqNode outerKey, innerKey;
+
+                        if (LeftAlias() == baseAlias && RightAlias() == joinAlias) {
+                            outerKey = Visit(cmpCtx.left);
+                            innerKey = Visit(cmpCtx.right);
+                        } else if (LeftAlias() == joinAlias && RightAlias() == baseAlias) {
+                            outerKey = Visit(cmpCtx.right);
+                            innerKey = Visit(cmpCtx.left);
+                        } else {
+                            throw new NotSupportedException(
+                                $"[ERROR] JOIN ON condition must directly compare the outer table alias " +
+                                $"('{baseAlias}') with the inner table alias ('{joinAlias}'), " +
+                                $"e.g. '{baseAlias}.Key = {joinAlias}.Key'.");
+                        }
+
+                        queryNode.Methods.Add(new LinqJoinNode {
+                            InnerTable = joinTable,
+                            OuterParam = baseAlias,
+                            InnerParam = joinAlias,
+                            OuterKey = outerKey,
+                            InnerKey = innerKey,
+                        });
+                    } else {
+
+                        throw new NotSupportedException(
+                            "[ERROR] JOIN ON condition must be a simple equality (a.Key = b.Key).");
+                    }
+                }
+            }
+
+            bool hasJoin = fromCtx.joinClause().Length > 0;
 
             // WHERE 
 
@@ -209,7 +288,17 @@ namespace SqlToLinq.Core {
             var columnsNode = Visit(context.columnList());
             bool isGlobalSingleAggregate = false;
 
-            if (!hasGroupBy && columnsNode is LinqAnonymousObjectNode globalAnonNode && globalAnonNode.Properties.Count == 1 && globalAnonNode.Properties[0].Expression is LinqAggregateNode globalAggNode) {
+            if (hasJoin && columnsNode is LinqAnonymousObjectNode joinAnonNode) {
+
+                var lastMethod = queryNode.Methods[queryNode.Methods.Count - 1];
+
+                if (lastMethod is LinqJoinNode joinNode) {
+                    joinNode.ResultSelector = joinAnonNode;
+                } else if (lastMethod is LinqCrossJoinNode crossNode) {
+                    crossNode.ResultSelector = joinAnonNode;
+                }
+
+            } else if (!hasGroupBy && columnsNode is LinqAnonymousObjectNode globalAnonNode && globalAnonNode.Properties.Count == 1 && globalAnonNode.Properties[0].Expression is LinqAggregateNode globalAggNode) {
 
                 isGlobalSingleAggregate = true;
 
@@ -599,6 +688,14 @@ namespace SqlToLinq.Core {
                 Operator = context.op.GetText(),
                 Right = Visit(context.right)
             };
+        }
+
+        public override LinqNode VisitQualifiedColumnExpr([NotNull] SqlParserParser.QualifiedColumnExprContext context) {
+
+            string tableAlias = context.IDENTIFIER(0).GetText();
+            string columnName = ToPascalCase(context.IDENTIFIER(1).GetText());
+
+            return new LinqIdentifierNode { Name = $"{tableAlias}.{columnName}" };
         }
 
         // Column expression processing, converting to C# property access, considering GROUP BY context

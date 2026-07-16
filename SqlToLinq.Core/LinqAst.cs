@@ -14,8 +14,8 @@ namespace SqlToLinq.Core {
         // Name of the source table 
         public string SourceTable { get; set; }
 
-        // List of chained LINQ method calls 
-        public List<LinqMethodCallNode> Methods { get; set; } = new List<LinqMethodCallNode>();
+        // List of chained LINQ method calls or join nodes
+        public List<LinqNode> Methods { get; set; } = new List<LinqNode>();
 
         // Generates the LINQ query code as a string
         public override string ToCodeString() {
@@ -259,6 +259,58 @@ namespace SqlToLinq.Core {
             }
 
             return $"({result})";
+        }
+    }
+
+    // INNER / LEFT JOIN 
+
+    public class LinqJoinNode : LinqNode {
+
+        public string InnerTable { get; set; }
+
+        public string OuterParam { get; set; }
+
+        public string InnerParam { get; set; }
+
+        public LinqNode OuterKey { get; set; }
+
+        public LinqNode InnerKey { get; set; }
+
+        public LinqNode ResultSelector { get; set; }
+
+        public override string ToCodeString() {
+
+            string resultSelectorStr = ResultSelector != null
+                ? ResultSelector.ToCodeString()
+                : $"new {{ {OuterParam}, {InnerParam} }}";
+
+            return $".Join(db.{InnerTable}, " +
+                   $"{OuterParam} => {OuterKey.ToCodeString()}, " +
+                   $"{InnerParam} => {InnerKey.ToCodeString()}, " +
+                   $"({OuterParam}, {InnerParam}) => {resultSelectorStr})";
+        }
+    }
+
+    // CROSS JOIN
+
+    public class LinqCrossJoinNode : LinqNode {
+
+        public string InnerTable { get; set; }
+
+        public string OuterParam { get; set; }
+
+        public string InnerParam { get; set; }
+
+        public LinqNode ResultSelector { get; set; }
+
+        public override string ToCodeString() {
+
+            string resultSelectorStr = ResultSelector != null
+                ? ResultSelector.ToCodeString()
+                : $"new {{ {OuterParam}, {InnerParam} }}";
+
+            return $".SelectMany({OuterParam} => db.{InnerTable}, " +
+                   $"({OuterParam}, {InnerParam}) => {resultSelectorStr})";
         }
     }
 

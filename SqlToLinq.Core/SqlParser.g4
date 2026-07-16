@@ -10,7 +10,7 @@ statement : selectStmt
 
 
 
-selectStmt : SELECT DISTINCT? columnList FROM tableName (WHERE condition)?
+selectStmt : SELECT DISTINCT? columnList FROM fromClause (WHERE condition)?
 			 groupClause? havingClause? orderClause? limitClause? offsetClause? ;
 
 updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
@@ -18,6 +18,16 @@ updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
 insertStmt : INSERT INTO tableName ('(' idList ')')? VALUES '(' valueList ')' ;
 
 deleteStmt : DELETE FROM tableName (WHERE condition)? ;
+
+fromClause : tableRef joinClause* ;
+
+tableRef : tableName (AS? alias)? ;
+
+joinClause : joinType? JOIN tableRef ON condition ;
+
+joinType : INNER | LEFT OUTER? | CROSS ;
+
+alias : IDENTIFIER ;
 
 
 
@@ -69,6 +79,7 @@ expr : left=expr op=mathOp right=expr                 		# mathExpr
      | IDENTIFIER '(' expr COMMA expr ')'            		# stringFunc2Expr
      | IDENTIFIER '(' expr COMMA expr COMMA expr ')' 		# stringFunc3Expr
      | caseExpr                                       		# caseExprAlt
+     | IDENTIFIER DOT IDENTIFIER                     		# qualifiedColumnExpr
      | IDENTIFIER                                     		# columnExpr
      | NUMBER                                          		# numberExpr
      | STRING_LITERAL                                  		# stringExpr
@@ -87,6 +98,12 @@ mathOp : PLUS | MINUS | STAR | DIV ;
 
 
 
+JOIN    	: [Jj][Oo][Ii][Nn] ;
+INNER   	: [Ii][Nn][Nn][Ee][Rr] ;
+LEFT    	: [Ll][Ee][Ff][Tt] ;
+OUTER  		: [Oo][Uu][Tt][Ee][Rr] ;
+CROSS  	 	: [Cc][Rr][Oo][Ss][Ss] ;
+ON      	: [Oo][Nn] ;
 UPDATE 		: [Uu][Pp][Dd][Aa][Tt][Ee] ;
 SET    		: [Ss][Ee][Tt] ;
 INSERT 		: [Ii][Nn][Ss][Ee][Rr][Tt] ;
@@ -125,6 +142,7 @@ NULL_TOKEN 	: [Nn][Uu][Ll][Ll] ;
 STAR      : '*' ;
 COMMA     : ',' ;
 SEMICOLON : ';' ;
+DOT       : '.' ;
 
 EQ  : '=' ;
 NEQ : '<>' ;
