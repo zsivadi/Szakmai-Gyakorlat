@@ -178,6 +178,35 @@ namespace SqlToLinq.Core {
         }
     }
 
+    public class LinqStringFunctionNode : LinqNode {
+
+        public string FunctionName { get; set; }
+
+        public List<LinqNode> Arguments { get; set; } = new List<LinqNode>();
+
+        public override string ToCodeString() {
+
+            string arg0 = Arguments.Count > 0 ? Arguments[0].ToCodeString() : "";
+            string arg1 = Arguments.Count > 1 ? Arguments[1].ToCodeString() : "";
+            string arg2 = Arguments.Count > 2 ? Arguments[2].ToCodeString() : "";
+
+            return FunctionName.ToUpperInvariant() switch {
+                "UPPER" => $"{arg0}.ToUpper()",
+                "LOWER" => $"{arg0}.ToLower()",
+                "TRIM" => $"{arg0}.Trim()",
+                "LTRIM" => $"{arg0}.TrimStart()",
+                "RTRIM" => $"{arg0}.TrimEnd()",
+                "LENGTH" => $"{arg0}.Length",
+                "SUBSTRING" => $"{arg0}.Substring({arg1} - 1, {arg2})",
+                "COALESCE" => $"({arg0} ?? {arg1})",
+                "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
+
+                _ => throw new System.NotSupportedException(
+                    $"[ERROR] Unsupported function: '{FunctionName}'. " +
+                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LEN, LENGTH, SUBSTRING, COALESCE, NULLIF.")
+            };
+        }
+    }
 
     // Regex for LIKE patterns
 

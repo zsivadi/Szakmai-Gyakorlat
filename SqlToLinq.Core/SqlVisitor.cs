@@ -329,12 +329,26 @@ namespace SqlToLinq.Core {
             return anonNode;
         }
 
-        // Aggregate function processing (COUNT, SUM, AVG, MIN, MAX)
+        // Aggregate and string function processing
+
+        private static readonly System.Collections.Generic.HashSet<string> StringFunctions =
+            new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) {
+                "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH"
+            };
 
         public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
 
-            string funcName = ToPascalCase(context.IDENTIFIER().GetText());
+            string rawName = context.IDENTIFIER().GetText();
 
+            if (StringFunctions.Contains(rawName)) {
+
+                var node = new LinqStringFunctionNode { FunctionName = rawName.ToUpperInvariant() };
+
+                if (context.expr() != null) node.Arguments.Add(Visit(context.expr()));
+                return node;
+            }
+
+            string funcName = ToPascalCase(rawName);
             if (funcName == "Avg") funcName = "Average";
 
             if (funcName == "Count") {
@@ -352,6 +366,29 @@ namespace SqlToLinq.Core {
                 FunctionName = funcName,
                 Argument = argNode
             };
+        }
+
+        // Two-argument functions: COALESCE, NULLIF, SUBSTRING (without length)
+
+        public override LinqNode VisitStringFunc2Expr([NotNull] SqlParserParser.StringFunc2ExprContext context) {
+
+            string funcName = context.IDENTIFIER().GetText().ToUpperInvariant();
+            var node = new LinqStringFunctionNode { FunctionName = funcName };
+            node.Arguments.Add(Visit(context.expr(0)));
+            node.Arguments.Add(Visit(context.expr(1)));
+            return node;
+        }
+
+        // Three-argument functions: SUBSTRING
+
+        public override LinqNode VisitStringFunc3Expr([NotNull] SqlParserParser.StringFunc3ExprContext context) {
+
+            string funcName = context.IDENTIFIER().GetText().ToUpperInvariant();
+            var node = new LinqStringFunctionNode { FunctionName = funcName };
+            node.Arguments.Add(Visit(context.expr(0)));
+            node.Arguments.Add(Visit(context.expr(1)));
+            node.Arguments.Add(Visit(context.expr(2)));
+            return node;
         }
 
         // Conditions processing

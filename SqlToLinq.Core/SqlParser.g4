@@ -66,6 +66,8 @@ exprList : expr (COMMA expr)* ;
 
 expr : left=expr op=mathOp right=expr                 		# mathExpr
      | IDENTIFIER '(' (STAR | expr) ')'              		# aggregateExpr
+     | IDENTIFIER '(' expr COMMA expr ')'            		# stringFunc2Expr
+     | IDENTIFIER '(' expr COMMA expr COMMA expr ')' 		# stringFunc3Expr
      | caseExpr                                       		# caseExprAlt
      | IDENTIFIER                                     		# columnExpr
      | NUMBER                                          		# numberExpr
