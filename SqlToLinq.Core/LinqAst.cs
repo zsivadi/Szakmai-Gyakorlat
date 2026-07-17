@@ -203,7 +203,7 @@ namespace SqlToLinq.Core {
 
                 _ => throw new System.NotSupportedException(
                     $"[ERROR] Unsupported function: '{FunctionName}'. " +
-                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, COALESCE, NULLIF.")
+                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LEN, LENGTH, SUBSTRING, COALESCE, NULLIF.")
             };
         }
     }
@@ -262,55 +262,48 @@ namespace SqlToLinq.Core {
         }
     }
 
-    // INNER / LEFT JOIN 
-
-    public class LinqJoinNode : LinqNode {
+    public abstract class LinqJoinBaseNode : LinqNode {
 
         public string InnerTable { get; set; }
 
         public string OuterParam { get; set; }
 
         public string InnerParam { get; set; }
+
+        public LinqNode ResultSelector { get; set; }
+
+        protected string ResultSelectorCodeString() {
+            return ResultSelector != null
+                ? ResultSelector.ToCodeString()
+                : $"new {{ {OuterParam}, {InnerParam} }}";
+        }
+    }
+
+    // INNER / LEFT JOIN (equi-join), rendered as db.Table.Join(...)
+
+    public class LinqJoinNode : LinqJoinBaseNode {
 
         public LinqNode OuterKey { get; set; }
 
         public LinqNode InnerKey { get; set; }
 
-        public LinqNode ResultSelector { get; set; }
-
         public override string ToCodeString() {
-
-            string resultSelectorStr = ResultSelector != null
-                ? ResultSelector.ToCodeString()
-                : $"new {{ {OuterParam}, {InnerParam} }}";
 
             return $".Join(db.{InnerTable}, " +
                    $"{OuterParam} => {OuterKey.ToCodeString()}, " +
                    $"{InnerParam} => {InnerKey.ToCodeString()}, " +
-                   $"({OuterParam}, {InnerParam}) => {resultSelectorStr})";
+                   $"({OuterParam}, {InnerParam}) => {ResultSelectorCodeString()})";
         }
     }
 
-    // CROSS JOIN
+    // CROSS JOIN, rendered as db.Table.SelectMany(...)
 
-    public class LinqCrossJoinNode : LinqNode {
-
-        public string InnerTable { get; set; }
-
-        public string OuterParam { get; set; }
-
-        public string InnerParam { get; set; }
-
-        public LinqNode ResultSelector { get; set; }
+    public class LinqCrossJoinNode : LinqJoinBaseNode {
 
         public override string ToCodeString() {
 
-            string resultSelectorStr = ResultSelector != null
-                ? ResultSelector.ToCodeString()
-                : $"new {{ {OuterParam}, {InnerParam} }}";
-
             return $".SelectMany({OuterParam} => db.{InnerTable}, " +
-                   $"({OuterParam}, {InnerParam}) => {resultSelectorStr})";
+                   $"({OuterParam}, {InnerParam}) => {ResultSelectorCodeString()})";
         }
     }
 
