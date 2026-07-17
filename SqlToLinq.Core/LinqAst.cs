@@ -203,7 +203,7 @@ namespace SqlToLinq.Core {
 
                 _ => throw new System.NotSupportedException(
                     $"[ERROR] Unsupported function: '{FunctionName}'. " +
-                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LEN, LENGTH, SUBSTRING, COALESCE, NULLIF.")
+                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, COALESCE, NULLIF.")
             };
         }
     }

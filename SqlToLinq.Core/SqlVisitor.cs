@@ -12,7 +12,9 @@ namespace SqlToLinq.Core {
 
         private bool _inWhereClause = false;
         private bool _inAggregate = false;
+        private bool _hasJoin = false;
 
+        private Dictionary<string, string> _joinKeyAliasMap = null;
         private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
         private Dictionary<string, string> _tableAliases = new Dictionary<string, string>();
 
@@ -102,7 +104,14 @@ namespace SqlToLinq.Core {
 
             // JOIN
 
+            var aliasAccessPrefix = new Dictionary<string, string> { [baseAlias] = baseAlias };
+
+            string previousWrapper = null; 
+            int joinStepIndex = 0;
+
             foreach (var joinCtx in fromCtx.joinClause()) {
+
+                joinStepIndex++;
 
                 var joinRef = joinCtx.tableRef();
 
@@ -113,13 +122,30 @@ namespace SqlToLinq.Core {
 
                 _tableAliases[joinAlias] = joinTable;
 
+                string outerParam = previousWrapper ?? baseAlias;
+                bool outerIsWrapper = previousWrapper != null;
+
+                _joinKeyAliasMap = new Dictionary<string, string>();
+                foreach (var known in aliasAccessPrefix.Keys) {
+                    _joinKeyAliasMap[known] = outerIsWrapper ? $"{outerParam}.{known}" : known;
+                }
+                _joinKeyAliasMap[joinAlias] = joinAlias;
+
+                var flattenResultSelector = new LinqAnonymousObjectNode();
+
+                foreach (var known in aliasAccessPrefix.Keys) {
+                    flattenResultSelector.Properties.Add((null, new LinqIdentifierNode { Name = _joinKeyAliasMap[known] }));
+                }
+                flattenResultSelector.Properties.Add((null, new LinqIdentifierNode { Name = joinAlias }));
+
                 bool isCross = joinCtx.joinType() != null && joinCtx.joinType().CROSS() != null;
 
                 if (isCross) {
                     queryNode.Methods.Add(new LinqCrossJoinNode {
                         InnerTable = joinTable,
-                        OuterParam = baseAlias,
+                        OuterParam = outerParam,
                         InnerParam = joinAlias,
+                        ResultSelector = flattenResultSelector,
                     });
                 } else {
 
@@ -137,27 +163,40 @@ namespace SqlToLinq.Core {
                                 ? rq.IDENTIFIER(0).GetText()
                                 : null;
 
+                        string leftAlias = LeftAlias();
+                        string rightAlias = RightAlias();
+
+                        bool leftIsKnown = leftAlias != null && aliasAccessPrefix.ContainsKey(leftAlias);
+                        bool rightIsKnown = rightAlias != null && aliasAccessPrefix.ContainsKey(rightAlias);
+
+                        bool leftIsNew = leftAlias == joinAlias;
+                        bool rightIsNew = rightAlias == joinAlias;
+
                         LinqNode outerKey, innerKey;
 
-                        if (LeftAlias() == baseAlias && RightAlias() == joinAlias) {
+                        if (leftIsKnown && rightIsNew) {
+
                             outerKey = Visit(cmpCtx.left);
                             innerKey = Visit(cmpCtx.right);
-                        } else if (LeftAlias() == joinAlias && RightAlias() == baseAlias) {
+                        } else if (leftIsNew && rightIsKnown) {
+
                             outerKey = Visit(cmpCtx.right);
                             innerKey = Visit(cmpCtx.left);
                         } else {
+
                             throw new NotSupportedException(
-                                $"[ERROR] JOIN ON condition must directly compare the outer table alias " +
-                                $"('{baseAlias}') with the inner table alias ('{joinAlias}'), " +
-                                $"e.g. '{baseAlias}.Key = {joinAlias}.Key'.");
+                                $"[ERROR] JOIN ON condition must directly compare a previously introduced " +
+                                $"table alias with the newly joined alias ('{joinAlias}'), " +
+                                $"e.g. '{joinAlias}.Key = otherAlias.Key'.");
                         }
 
                         queryNode.Methods.Add(new LinqJoinNode {
                             InnerTable = joinTable,
-                            OuterParam = baseAlias,
+                            OuterParam = outerParam,
                             InnerParam = joinAlias,
                             OuterKey = outerKey,
                             InnerKey = innerKey,
+                            ResultSelector = flattenResultSelector,
                         });
                     } else {
 
@@ -165,9 +204,21 @@ namespace SqlToLinq.Core {
                             "[ERROR] JOIN ON condition must be a simple equality (a.Key = b.Key).");
                     }
                 }
+
+                _joinKeyAliasMap = null;
+
+                string wrapperName = $"j{joinStepIndex}";
+
+                foreach (var known in aliasAccessPrefix.Keys.ToList()) {
+                    aliasAccessPrefix[known] = $"{wrapperName}.{known}";
+                }
+
+                aliasAccessPrefix[joinAlias] = $"{wrapperName}.{joinAlias}";
+                previousWrapper = wrapperName;
             }
 
             bool hasJoin = fromCtx.joinClause().Length > 0;
+            _hasJoin = hasJoin;
 
             // WHERE 
 
@@ -288,17 +339,7 @@ namespace SqlToLinq.Core {
             var columnsNode = Visit(context.columnList());
             bool isGlobalSingleAggregate = false;
 
-            if (hasJoin && columnsNode is LinqAnonymousObjectNode joinAnonNode) {
-
-                var lastMethod = queryNode.Methods[queryNode.Methods.Count - 1];
-
-                if (lastMethod is LinqJoinNode joinNode) {
-                    joinNode.ResultSelector = joinAnonNode;
-                } else if (lastMethod is LinqCrossJoinNode crossNode) {
-                    crossNode.ResultSelector = joinAnonNode;
-                }
-
-            } else if (!hasGroupBy && columnsNode is LinqAnonymousObjectNode globalAnonNode && globalAnonNode.Properties.Count == 1 && globalAnonNode.Properties[0].Expression is LinqAggregateNode globalAggNode) {
+            if (!hasGroupBy && columnsNode is LinqAnonymousObjectNode globalAnonNode && globalAnonNode.Properties.Count == 1 && globalAnonNode.Properties[0].Expression is LinqAggregateNode globalAggNode) {
 
                 isGlobalSingleAggregate = true;
 
@@ -694,6 +735,14 @@ namespace SqlToLinq.Core {
 
             string tableAlias = context.IDENTIFIER(0).GetText();
             string columnName = ToPascalCase(context.IDENTIFIER(1).GetText());
+
+            if (_joinKeyAliasMap != null && _joinKeyAliasMap.TryGetValue(tableAlias, out var accessPrefix)) {
+                return new LinqIdentifierNode { Name = $"{accessPrefix}.{columnName}" };
+            }
+
+            if (_hasJoin) {
+                return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
+            }
 
             return new LinqIdentifierNode { Name = $"{tableAlias}.{columnName}" };
         }
