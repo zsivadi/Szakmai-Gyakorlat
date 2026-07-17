@@ -640,5 +640,35 @@
 		"Desc": "LENGTH WHERE-ben és rendezés.",
 		"SqlInput": "SELECT Name FROM Users WHERE LENGTH(Name) >= 3 ORDER BY LENGTH(Name) DESC",
 		"ExpectedLinq": "db.Users.Where(x => x.Name.Length >= 3).OrderByDescending(x => x.Name.Length).Select(x => new { Name = x.Name }).ToList()"
+	},
+	{
+		"Id": 108,
+		"Desc": "INNER JOIN alapeset, explicit alias-okkal.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 109,
+		"Desc": "INNER JOIN explicit INNER kulcsszóval.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u INNER JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 110,
+		"Desc": "INNER JOIN a join feltétel fordított sorrendjével.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u JOIN Orders o ON o.owner = u.id",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 111,
+		"Desc": "CROSS JOIN.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u CROSS JOIN Orders o ON 1 = 1",
+		"ExpectedLinq": "db.Users.SelectMany(u => db.Orders, (u, o) => new { u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 112,
+		"Desc": "Két láncolt INNER JOIN, három táblán keresztül.",
+		"SqlInput": "SELECT u.name, o.item, p.title FROM Users u JOIN Orders o ON u.id = o.owner JOIN Products p ON o.id = p.parent",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Join(db.Products, j1 => j1.o.Id, p => p.Parent, (j1, p) => new { j1.u, j1.o, p }).Select(x => new { x.u.Name, x.o.Item, x.p.Title }).ToList()"
 	}
 ]
