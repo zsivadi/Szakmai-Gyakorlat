@@ -8,15 +8,35 @@
  
 \usepackage{graphicx}
 \usepackage{hyperref}
-\usepackage{listings}
-\usepackage{microtype}
+\usepackage[hypcap=true]{caption}
+\usepackage{minted}
+\usepackage[expansion=false]{microtype}
 \usepackage{tabularx}
 \usepackage{booktabs}
 \usepackage{longtable}
+
+% minted beállítások
+\setminted[csharp]{
+  bgcolor=gray!8,
+  fontsize=\small,
+  breaklines=true,
+  frame=single,
+  framesep=6pt,
+  style=tango,
+}
+
+% "Ábra" felirat és római számozás a listing floathoz
+\renewcommand{\listingscaption}{Ábra}
+\makeatletter
+\AtBeginDocument{%
+  \counterwithin{listing}{section}%
+  \renewcommand{\thelisting}{\Roman{listing}}%
+}
+\makeatother
  
 \bibliographystyle{plain}
 
-\title{SQL-LINQ forráskód fordító dokumentáció}
+\title{SQL-LINQ forráskód fordító dokumentáció} 
 \author{Ivádi Zsombor}
 \date{2026}
 
@@ -52,9 +72,12 @@ Az SQL egy tisztán deklaratív nyelv, amely arra fókuszál, hogy \emph{mit} ak
 
 \subsection{Az adatbázis-elérés megközelítései}
 
-Az adatbázis-elérés különböző módszereit az alábbi táblázat foglalja össze, az egyszerűbbtől a magasabb szintű absztrakció felé haladva:
+Az adatbázis-elérés különböző módszereit az \ref{tab:adatbazis-eleres}. táblázat foglalja össze, az egyszerűbbtől a magasabb szintű absztrakció felé haladva:
  
-\begin{center}
+\begin{table}[h]
+\centering
+\caption{Az adatbázis-elérés megközelítései}
+\label{tab:adatbazis-eleres}
 \renewcommand{\arraystretch}{1.4}
 \small
 \begin{tabular}{|p{0.19\textwidth}|p{0.28\textwidth}|p{0.37\textwidth}|}
@@ -74,23 +97,26 @@ LINQ + EF Core & Típusbiztos, fordítási idejű ellenőrzéssel, refaktorálha
   \texttt{db.Users} \newline \texttt{.Where(x => x.Id == id)} \newline \texttt{.ToList()} \\
 \hline
 \end{tabular}
-\end{center}
+\end{table}
 
 Ezen különbségek áthidalására a fejlesztők a múltban gyakran nyers SQL lekérdezéseket ágyaztak be az alkalmazás forráskódjába stringek formájában. Ez a megközelítés azonban komoly karbantarthatósági és biztonsági problémákkal járt. A beágyazott SQL stringek esetében a fordítóprogram (compiler) nem képes fordítási idejű (compile-time) szintaktikai vagy szemantikai ellenőrzést végezni. Ebből adódóan egy elgépelt oszlopnév vagy egy típusillesztési hiba kizárólag futásidőben (runtime) derül ki, ami jelentősen növeli a szoftver meghibásodásának kockázatát. Emellett az adatbázis-séma változásakor (például egy mező átnevezésekor) a modern integrált fejlesztőkörnyezetek (IDE) refaktoráló eszközei nem képesek automatikusan frissíteni a stringekben rejlő hivatkozásokat. Ezzel szemben a LINQ használatakor a típusos modelleken végzett módosítások a teljes lekérdezés-láncot automatikusan és biztonságosan frissítik \cite{skeet2019csharp}.
 
 \subsection{Az SQL és LINQ típusrendszerének kapcsolata}
 
 A LINQ kétféle szintaxisban írható fel: lekérdezési szintaxisban (\emph{query syntax}), amely az SQL-hez hasonló kulcsszavakat használ, és metódusszintaxisban (\emph{method syntax}), amely láncolt metódushívásokból áll. A transzpiler az utóbbit generálja, mivel az programozottan könnyebben állítható elő. A lekérdezési lánc általános alakja:
- 
-\begin{center}
-\texttt{db.Tabla}\\
-\texttt{\ \ .Where(x => \emph{feltétel})}\\
-\texttt{\ \ .GroupBy(x => x.\emph{Kulcs})}\\
-\texttt{\ \ .OrderBy(x => x.\emph{Oszlop})}\\
-\texttt{\ \ .Select(x => new \{ \emph{oszlopok} \})}\\
-\texttt{\ \ .Take(\emph{n})}\\
-\texttt{\ \ .ToList();}
-\end{center}
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+db.Tabla
+  .Where(x => feltétel)
+  .GroupBy(x => x.Kulcs)
+  .OrderBy(x => x.Oszlop)
+  .Select(x => new { oszlopok })
+  .Take(n)
+  .ToList();
+\end{minted}
+\caption{LINQ metódusszintaxis általános alakja}
+\end{listing}
  
 A lánc sorrendje nem tetszőleges: a LINQ kiértékelési szemantikája megköveteli, hogy a szűrés (\texttt{Where}) a vetítés (\texttt{Select}) előtt, a lapozás (\texttt{Take}/\texttt{Skip}) pedig az összes többi művelet után következzen. Ez tükrözi az SQL végrehajtási sorrendjét: 
 \texttt{FROM} $\to$ \texttt{WHERE} $\to$ \texttt{GROUP BY} $\to$ \texttt{HAVING} $\to$ \texttt{SELECT} $\to$ \texttt{DISTINCT} $\to$ \texttt{ORDER BY} $\to$ \texttt{LIMIT}.
@@ -168,7 +194,7 @@ Ezen karbantartási és migrációs problémák kiküszöbölésére hatékony m
 \texttt{col AS alias}           & \texttt{alias = x.Col}                              & Anonim típusban \\
 \end{longtable}
 
-\section{Tesztelés}
+\section{Tesztelés} 
 
 \section{Összegzés}
 
