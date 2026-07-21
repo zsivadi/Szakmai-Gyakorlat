@@ -343,12 +343,72 @@ namespace SqlToLinq.Core {
 
             var aliasAccessPrefix = new Dictionary<string, string> { [baseAlias] = baseAlias };
 
-            string previousWrapper = null; 
+            string previousWrapper = null;
             int joinStepIndex = 0;
 
             foreach (var joinCtx in fromCtx.joinClause()) {
+
                 joinStepIndex++;
-                AddJoinStep(joinCtx, joinStepIndex, baseAlias, aliasAccessPrefix, ref previousWrapper, queryNode);
+
+                bool isRight = joinCtx.joinType() != null && joinCtx.joinType().RIGHT() != null;
+
+                if (isRight) {
+
+                    var joinRef = joinCtx.tableRef();
+                    string joinTable = ToPascalCase(joinRef.tableName().GetText());
+                    string joinAlias = joinRef.alias() != null
+                        ? joinRef.alias().GetText()
+                        : joinTable.Substring(0, 1).ToLower();
+
+                    _tableAliases[joinAlias] = joinTable;
+
+                    queryNode.SourceTable = joinTable;
+
+                    aliasAccessPrefix.Clear();
+
+                    aliasAccessPrefix[joinAlias] = joinAlias;
+                    aliasAccessPrefix[baseAlias] = baseAlias;
+
+                    string outerParam = previousWrapper ?? joinAlias;
+                    bool outerIsWrapper = previousWrapper != null;
+
+                    _joinKeyAliasMap = BuildJoinKeyAliasMap(aliasAccessPrefix, outerParam, outerIsWrapper, baseAlias);
+
+                    var flattenResultSelector = new LinqAnonymousObjectNode();
+                    flattenResultSelector.Properties.Add((null, new LinqIdentifierNode { Name = joinAlias }));
+                    flattenResultSelector.Properties.Add((null, new LinqIdentifierNode { Name = baseAlias }));
+
+                    var onCondition = joinCtx.condition();
+                    if (!(onCondition is SqlParserParser.CompareConditionContext cmpCtx) || cmpCtx.op.GetText() != "=") {
+
+                        throw new NotSupportedException(
+                            "[ERROR] RIGHT JOIN ON condition must be a simple equality (a.Key = b.Key).");
+                    }
+
+                    var (outerKey, innerKey) = ResolveJoinKeysDirectional(cmpCtx, joinAlias, baseAlias);
+
+                    queryNode.Methods.Add(new LinqLeftJoinNode {
+                        InnerTable = _tableAliases[baseAlias],
+                        OuterParam = joinAlias,
+                        InnerParam = baseAlias,
+                        OuterKey = outerKey,
+                        InnerKey = innerKey,
+                        ResultSelector = flattenResultSelector,
+                        OuterAliases = new List<string> { joinAlias },
+                    });
+
+                    _joinKeyAliasMap = null;
+
+                    string wrapperName = $"j{joinStepIndex}";
+
+                    aliasAccessPrefix[joinAlias] = $"{wrapperName}.{joinAlias}";
+                    aliasAccessPrefix[baseAlias] = $"{wrapperName}.{baseAlias}";
+
+                    previousWrapper = wrapperName;
+
+                } else {
+                    AddJoinStep(joinCtx, joinStepIndex, baseAlias, aliasAccessPrefix, ref previousWrapper, queryNode);
+                }
             }
         }
 
@@ -377,15 +437,17 @@ namespace SqlToLinq.Core {
             var flattenResultSelector = BuildFlattenResultSelector(aliasAccessPrefix.Keys, joinAlias);
 
             bool isCross = joinCtx.joinType() != null && joinCtx.joinType().CROSS() != null;
+            bool isLeft = joinCtx.joinType() != null && joinCtx.joinType().LEFT() != null;
 
             if (isCross) {
-
                 queryNode.Methods.Add(new LinqCrossJoinNode {
                     InnerTable = joinTable,
                     OuterParam = outerParam,
                     InnerParam = joinAlias,
                     ResultSelector = flattenResultSelector,
                 });
+            } else if (isLeft) {
+                AddLeftJoinStep(joinCtx, joinTable, joinAlias, outerParam, aliasAccessPrefix, flattenResultSelector, queryNode);
             } else {
                 AddEquiJoinStep(joinCtx, joinTable, joinAlias, outerParam, aliasAccessPrefix, flattenResultSelector, queryNode);
             }
@@ -423,6 +485,35 @@ namespace SqlToLinq.Core {
             });
         }
 
+        private void AddLeftJoinStep(
+            SqlParserParser.JoinClauseContext joinCtx,
+            string joinTable,
+            string joinAlias,
+            string outerParam,
+            Dictionary<string, string> aliasAccessPrefix,
+            LinqAnonymousObjectNode flattenResultSelector,
+            LinqQueryNode queryNode) {
+
+            var onCondition = joinCtx.condition();
+
+            if (!(onCondition is SqlParserParser.CompareConditionContext cmpCtx) || cmpCtx.op.GetText() != "=") {
+                throw new NotSupportedException(
+                    "[ERROR] LEFT JOIN ON condition must be a simple equality (a.Key = b.Key).");
+            }
+
+            var (outerKey, innerKey) = ResolveJoinKeys(cmpCtx, joinAlias, aliasAccessPrefix);
+
+            queryNode.Methods.Add(new LinqLeftJoinNode {
+                InnerTable = joinTable,
+                OuterParam = outerParam,
+                InnerParam = joinAlias,
+                OuterKey = outerKey,
+                InnerKey = innerKey,
+                ResultSelector = flattenResultSelector,
+                OuterAliases = aliasAccessPrefix.Values.ToList(),
+            });
+        }
+
         private (LinqNode OuterKey, LinqNode InnerKey) ResolveJoinKeys(
             SqlParserParser.CompareConditionContext cmpCtx,
             string joinAlias,
@@ -454,6 +545,31 @@ namespace SqlToLinq.Core {
                 $"[ERROR] JOIN ON condition must directly compare a previously introduced " +
                 $"table alias with the newly joined alias ('{joinAlias}'), " +
                 $"e.g. '{joinAlias}.Key = otherAlias.Key'.");
+        }
+
+        // Used by RIGHT JOIN where we already know which side is outer and which is inner —
+        // outerAlias is the right-hand (preserved) table, innerAlias is the left-hand table.
+        private (LinqNode OuterKey, LinqNode InnerKey) ResolveJoinKeysDirectional(
+            SqlParserParser.CompareConditionContext cmpCtx,
+            string outerAlias,
+            string innerAlias) {
+
+            string LeftAlias() =>
+                cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq ? lq.IDENTIFIER(0).GetText() : null;
+
+            string RightAlias() =>
+                cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq ? rq.IDENTIFIER(0).GetText() : null;
+
+            if (LeftAlias() == outerAlias && RightAlias() == innerAlias) {
+                return (Visit(cmpCtx.left), Visit(cmpCtx.right));
+            }
+
+            if (LeftAlias() == innerAlias && RightAlias() == outerAlias) {
+                return (Visit(cmpCtx.right), Visit(cmpCtx.left));
+            }
+
+            throw new NotSupportedException(
+                $"[ERROR] RIGHT JOIN ON condition must compare '{outerAlias}' with '{innerAlias}'.");
         }
 
         private Dictionary<string, string> BuildJoinKeyAliasMap(

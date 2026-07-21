@@ -109,8 +109,13 @@ namespace SqlToLinq.Core {
         public List<LinqNode> Values { get; set; } = new List<LinqNode>();
 
         public override string ToCodeString() {
+
             var valuesStr = string.Join(", ", Values.Select(v => v.ToCodeString()));
-            return $"new[] {{ {valuesStr} }}.Contains({Target.ToCodeString()})";
+
+            bool allNumeric = Values.All(v => v is LinqConstantNode c && c.Value is not string);
+            string arrayType = allNumeric ? "int?" : "string";
+
+            return $"new {arrayType}[] {{ {valuesStr} }}.Contains({Target.ToCodeString()})";
         }
     }
 
@@ -262,6 +267,8 @@ namespace SqlToLinq.Core {
         }
     }
 
+    // Common shape for all join node types
+
     public abstract class LinqJoinBaseNode : LinqNode {
 
         public string InnerTable { get; set; }
@@ -279,7 +286,7 @@ namespace SqlToLinq.Core {
         }
     }
 
-    // INNER / LEFT JOIN (equi-join), rendered as db.Table.Join(...)
+    // INNER JOIN
 
     public class LinqJoinNode : LinqJoinBaseNode {
 
@@ -296,7 +303,57 @@ namespace SqlToLinq.Core {
         }
     }
 
-    // CROSS JOIN, rendered as db.Table.SelectMany(...)
+    // LEFT JOIN — GroupJoin + SelectMany(DefaultIfEmpty)
+    // RIGHT JOIN is rewritten as LEFT JOIN with swapped sides by the visitor,
+    // so both map to this node.
+
+    public class LinqLeftJoinNode : LinqJoinBaseNode {
+
+        public LinqNode OuterKey { get; set; }
+
+        public LinqNode InnerKey { get; set; }
+
+        public List<string> OuterAliases { get; set; } = new List<string>();
+
+        public override string ToCodeString() {
+
+            string collectionParam = $"_{InnerParam}";
+            string gj = "gj";
+
+            string groupJoinResult = $"new {{ {OuterParam}, {collectionParam} }}";
+            string selectManyResult;
+
+            if (ResultSelector is LinqAnonymousObjectNode anonNode) {
+
+                var rewritten = anonNode.Properties.Select(p => {
+
+                    string expr = p.Expression is LinqIdentifierNode id ? id.Name : p.Expression.ToCodeString();
+
+                    foreach (var alias in OuterAliases) {
+                        if (expr == alias || expr.StartsWith(alias + ".")) {
+
+                            expr = $"{gj}.{expr}";
+                            break;
+                        }
+                    }
+                    return string.IsNullOrEmpty(p.Name) ? expr : $"{p.Name} = {expr}";
+                });
+                selectManyResult = $"new {{ {string.Join(", ", rewritten)} }}";
+            } else {
+                selectManyResult = $"new {{ {gj}.{OuterParam}, {InnerParam} }}";
+            }
+
+            return
+                $".GroupJoin(db.{InnerTable}, " +
+                $"{OuterParam} => {OuterKey.ToCodeString()}, " +
+                $"{InnerParam} => {InnerKey.ToCodeString()}, " +
+                $"({OuterParam}, {collectionParam}) => {groupJoinResult})" +
+                $".SelectMany({gj} => {gj}.{collectionParam}.DefaultIfEmpty(), " +
+                $"({gj}, {InnerParam}) => {selectManyResult})";
+        }
+    }
+
+    // CROSS JOIN
 
     public class LinqCrossJoinNode : LinqJoinBaseNode {
 

@@ -25,7 +25,7 @@ tableRef : tableName (AS? alias)? ;
 
 joinClause : joinType? JOIN tableRef ON condition ;
 
-joinType : INNER | LEFT OUTER? | CROSS ;
+joinType : INNER | LEFT OUTER? | RIGHT OUTER? | CROSS ;
 
 alias : IDENTIFIER ;
 
@@ -101,6 +101,7 @@ mathOp : PLUS | MINUS | STAR | DIV ;
 JOIN    	: [Jj][Oo][Ii][Nn] ;
 INNER   	: [Ii][Nn][Nn][Ee][Rr] ;
 LEFT    	: [Ll][Ee][Ff][Tt] ;
+RIGHT   	: [Rr][Ii][Gg][Hh][Tt] ;
 OUTER  		: [Oo][Uu][Tt][Ee][Rr] ;
 CROSS  	 	: [Cc][Rr][Oo][Ss][Ss] ;
 ON      	: [Oo][Nn] ;
