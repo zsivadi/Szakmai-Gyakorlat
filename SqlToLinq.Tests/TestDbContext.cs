@@ -6,24 +6,36 @@ namespace SqlToLinq.Tests {
     public record User(
         int Id,
         string Name,
-        int Age,
+        int? Age,
         string Role,
-        int Points,
-        int Bonus
+        int? Points,
+        int? Bonus
     );
 
     public record Order(
         int Id,
-        int Owner,
+        int? Owner,
         string Item,
-        int Qty
+        int? Qty
     );
 
     public record Product(
         int Id,
-        int Parent,
+        int? Parent,
         string Title,
-        int Price
+        int? Price
+    );
+
+    public record Category(
+        int Id,
+        int? Parent,
+        string Label
+    );
+
+    public record Warehouse(
+        int Id,
+        int? Parent,
+        string Location
     );
 
     public class TestDbContext : DbContext {
@@ -33,6 +45,10 @@ namespace SqlToLinq.Tests {
         public DbSet<Order> Orders { get; set; }
 
         public DbSet<Product> Products { get; set; }
+
+        public DbSet<Category> Categories { get; set; }
+
+        public DbSet<Warehouse> Warehouses { get; set; }
 
         private readonly SqliteConnection _connection;
 
@@ -69,6 +85,17 @@ namespace SqlToLinq.Tests {
                 new Product(2, 1, "Mouse Pad", 8),
                 new Product(3, 3, "USB Cable", 5),
                 new Product(4, 4, "HDMI Cable", 12)
+            );
+
+            db.Categories.AddRange(
+                new Category(1, 1, "Accessories"),
+                new Category(2, 2, "Accessories"),
+                new Category(3, 4, "Cables")
+            );
+
+            db.Warehouses.AddRange(
+                new Warehouse(1, 1, "Budapest"),
+                new Warehouse(2, 3, "Debrecen")
             );
 
             db.SaveChanges();

@@ -9,19 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="IOPairs.json" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Content Include="IOPairs.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-  </ItemGroup>
-  
-  <ItemGroup>
-    <None Update="IOPairs.json">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
   <ItemGroup>
