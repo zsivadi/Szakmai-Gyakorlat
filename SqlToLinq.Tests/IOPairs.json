@@ -489,13 +489,13 @@
 		"Id": 82,
 		"Desc": "IN használata.",
 		"SqlInput": "SELECT * FROM Users WHERE Role IN ('Admin', 'Member')",
-		"ExpectedLinq": "db.Users.Where(x => new[] { \"Admin\", \"Member\" }.Contains(x.Role)).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => new string[] { \"Admin\", \"Member\" }.Contains(x.Role)).ToList()"
 	},
 	{
 		"Id": 83,
 		"Desc": "NOT IN használata.",
 		"SqlInput": "SELECT * FROM Users WHERE Role NOT IN ('Guest')",
-		"ExpectedLinq": "db.Users.Where(x => !(new[] { \"Guest\" }.Contains(x.Role))).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !(new string[] { \"Guest\" }.Contains(x.Role))).ToList()"
 	},
 	{
 		"Id": 84,
@@ -670,5 +670,101 @@
 		"Desc": "Két láncolt INNER JOIN, három táblán keresztül.",
 		"SqlInput": "SELECT u.name, o.item, p.title FROM Users u JOIN Orders o ON u.id = o.owner JOIN Products p ON o.id = p.parent",
 		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Join(db.Products, j1 => j1.o.Id, p => p.Parent, (j1, p) => new { j1.u, j1.o, p }).Select(x => new { x.u.Name, x.o.Item, x.p.Title }).ToList()"
+	},
+	{
+		"Id": 113,
+		"Desc": "Négy láncolt INNER JOIN, öt táblán keresztül.",
+		"SqlInput": "SELECT u.name, o.item, p.title, c.label, w.location FROM Users u JOIN Orders o ON u.id = o.owner JOIN Products p ON o.id = p.parent JOIN Categories c ON p.id = c.parent JOIN Warehouses w ON c.id = w.parent",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Join(db.Products, j1 => j1.o.Id, p => p.Parent, (j1, p) => new { j1.u, j1.o, p }).Join(db.Categories, j2 => j2.p.Id, c => c.Parent, (j2, c) => new { j2.u, j2.o, j2.p, c }).Join(db.Warehouses, j3 => j3.c.Id, w => w.Parent, (j3, w) => new { j3.u, j3.o, j3.p, j3.c, w }).Select(x => new { x.u.Name, x.o.Item, x.p.Title, x.c.Label, x.w.Location }).ToList()"
+	},
+	{
+		"Id": 114,
+		"Desc": "LEFT JOIN alapeset.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 115,
+		"Desc": "LEFT OUTER JOIN explicit OUTER kulcsszóval.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT OUTER JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 116,
+		"Desc": "RIGHT JOIN alapeset.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u RIGHT JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Orders.GroupJoin(db.Users, o => o.Owner, u => u.Id, (o, _u) => new { o, _u }).SelectMany(gj => gj._u.DefaultIfEmpty(), (gj, u) => new { gj.o, u }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 117,
+		"Desc": "INNER JOIN WHERE feltétellel.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u JOIN Orders o ON u.id = o.owner WHERE u.age > 20",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Where(x => x.u.Age > 20).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 118,
+		"Desc": "INNER JOIN ORDER BY-jal.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u JOIN Orders o ON u.id = o.owner ORDER BY u.name ASC",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).OrderBy(x => x.u.Name).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 119,
+		"Desc": "INNER JOIN WHERE és LIMIT kombinációval.",
+		"SqlInput": "SELECT u.name, o.qty FROM Users u JOIN Orders o ON u.id = o.owner WHERE o.qty > 1 LIMIT 3",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).Where(x => x.o.Qty > 1).Select(x => new { x.u.Name, x.o.Qty }).Take(3).ToList()"
+	},
+	{
+		"Id": 120,
+		"Desc": "LEFT JOIN WHERE feltétellel a bal táblán.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT JOIN Orders o ON u.id = o.owner WHERE u.age >= 25",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).Where(x => x.u.Age >= 25).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 121,
+		"Desc": "LEFT JOIN ORDER BY DESC és LIMIT.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT JOIN Orders o ON u.id = o.owner ORDER BY u.name DESC LIMIT 4",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).OrderByDescending(x => x.u.Name).Select(x => new { x.u.Name, x.o.Item }).Take(4).ToList()"
+	},
+	{
+		"Id": 122,
+		"Desc": "RIGHT JOIN fordított ON feltétel sorrenddel.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u RIGHT JOIN Orders o ON o.owner = u.id",
+		"ExpectedLinq": "db.Orders.GroupJoin(db.Users, o => o.Owner, u => u.Id, (o, _u) => new { o, _u }).SelectMany(gj => gj._u.DefaultIfEmpty(), (gj, u) => new { gj.o, u }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 123,
+		"Desc": "RIGHT JOIN WHERE feltétellel.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u RIGHT JOIN Orders o ON u.id = o.owner WHERE o.qty > 1",
+		"ExpectedLinq": "db.Orders.GroupJoin(db.Users, o => o.Owner, u => u.Id, (o, _u) => new { o, _u }).SelectMany(gj => gj._u.DefaultIfEmpty(), (gj, u) => new { gj.o, u }).Where(x => x.o.Qty > 1).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 124,
+		"Desc": "INNER JOIN majd LEFT JOIN láncolva.",
+		"SqlInput": "SELECT u.name, o.item, p.title FROM Users u JOIN Orders o ON u.id = o.owner LEFT JOIN Products p ON o.id = p.parent",
+		"ExpectedLinq": "db.Users.Join(db.Orders, u => u.Id, o => o.Owner, (u, o) => new { u, o }).GroupJoin(db.Products, j1 => j1.o.Id, p => p.Parent, (j1, _p) => new { j1, _p }).SelectMany(gj => gj._p.DefaultIfEmpty(), (gj, p) => new { gj.j1.u, gj.j1.o, p }).Select(x => new { x.u.Name, x.o.Item, x.p.Title }).ToList()"
+	},
+	{
+		"Id": 125,
+		"Desc": "LEFT JOIN fordított ON feltétel sorrenddel.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT JOIN Orders o ON o.owner = u.id",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 126,
+		"Desc": "LEFT JOIN WHERE a jobb táblán szűr, null sorok kiesnek.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u LEFT JOIN Orders o ON u.id = o.owner WHERE o.item = 'Laptop'",
+		"ExpectedLinq": "db.Users.GroupJoin(db.Orders, u => u.Id, o => o.Owner, (u, _o) => new { u, _o }).SelectMany(gj => gj._o.DefaultIfEmpty(), (gj, o) => new { gj.u, o }).Where(x => x.o.Item == \"Laptop\").Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 127,
+		"Desc": "RIGHT JOIN ORDER BY a jobb táblán.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u RIGHT JOIN Orders o ON u.id = o.owner ORDER BY o.item ASC",
+		"ExpectedLinq": "db.Orders.GroupJoin(db.Users, o => o.Owner, u => u.Id, (o, _u) => new { o, _u }).SelectMany(gj => gj._u.DefaultIfEmpty(), (gj, u) => new { gj.o, u }).OrderBy(x => x.o.Item).Select(x => new { x.u.Name, x.o.Item }).ToList()"
+	},
+	{
+		"Id": 128,
+		"Desc": "RIGHT OUTER JOIN explicit OUTER kulcsszóval.",
+		"SqlInput": "SELECT u.name, o.item FROM Users u RIGHT OUTER JOIN Orders o ON u.id = o.owner",
+		"ExpectedLinq": "db.Orders.GroupJoin(db.Users, o => o.Owner, u => u.Id, (o, _u) => new { o, _u }).SelectMany(gj => gj._u.DefaultIfEmpty(), (gj, u) => new { gj.o, u }).Select(x => new { x.u.Name, x.o.Item }).ToList()"
 	}
 ]
