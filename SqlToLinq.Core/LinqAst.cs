@@ -207,6 +207,7 @@ namespace SqlToLinq.Core {
                 "SUBSTRING" => $"{arg0}.Substring({arg1} - 1, {arg2})",
                 "COALESCE" => $"({arg0} ?? {arg1})",
                 "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
+                "CONCAT" => $"string.Concat({arg0}, {arg1})",
                 "ROUND" => arg1 != "" ? $"Math.Round((double)({arg0}), {arg1})" : $"Math.Round((double)({arg0}))",
                 "ABS" => $"Math.Abs((int)({arg0}))",
                 "FLOOR" => $"Math.Floor((double)({arg0}))",
@@ -219,7 +220,7 @@ namespace SqlToLinq.Core {
                 _ => throw new System.NotSupportedException(
                     $"[ERROR] Unsupported function: '{FunctionName}'. " +
                     $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, " +
-                    $"COALESCE, NULLIF, ROUND, ABS, FLOOR, CEIL, CEILING, POWER, SQRT, SIGN.")
+                    $"CONCAT, COALESCE, NULLIF, ROUND, ABS, FLOOR, CEIL, CEILING, POWER, SQRT, SIGN.")
             };
         }
     }

@@ -77,6 +77,7 @@ condition : '(' condition ')'                                       # parensCond
 exprList : expr (COMMA expr)* ;
 
 expr : left=expr op=mathOp right=expr                          # mathExpr
+     | left=expr CONCAT right=expr                              # concatExpr
      | IDENTIFIER '(' DISTINCT expr ')'                        # distinctAggregateExpr
      | IDENTIFIER '(' (STAR | expr) ')'                        # aggregateExpr
      | IDENTIFIER '(' expr COMMA expr ')'                      # stringFunc2Expr
@@ -124,6 +125,7 @@ ASC  		: [Aa][Ss][Cc] ;
 DESC   		: [Dd][Ee][Ss][Cc] ;
 HAVING 		: [Hh][Aa][Vv][Ii][Nn][Gg] ;
 AS     		: [Aa][Ss] ;
+CONCAT      : '||' ;
 GROUP  		: [Gg][Rr][Oo][Uu][Pp] ;
 BETWEEN 	: [Bb][Ee][Tt][Ww][Ee][Ee][Nn] ;
 NOT     	: [Nn][Oo][Tt] ;

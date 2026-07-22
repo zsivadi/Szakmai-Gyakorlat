@@ -91,6 +91,7 @@ namespace SqlToLinq.Core {
             foreach (var item in columnList.selectItem()) {
                 if (item.IDENTIFIER() != null) {
                     string alias = ToPascalCase(item.IDENTIFIER().GetText());
+
                     if (item.expr() is SqlParserParser.ColumnExprContext colCtx) {
                         string original = ToPascalCase(colCtx.GetText());
                         aliases[alias] = original;
@@ -124,7 +125,7 @@ namespace SqlToLinq.Core {
             var queryNode = new LinqQueryNode { SourceTable = baseTable };
 
             // JOIN
-
+            
             // Each join step consumes either the raw base table (for the very first join) or the
             // flattened wrapper object produced by the previous step, and always flattens its own
             // result the same way. See BuildJoinChain for the details; this is what lets an
@@ -971,7 +972,7 @@ namespace SqlToLinq.Core {
 
             if (_inOrderBy && _selectAliases.ContainsKey(rawColumnName)) {
                 string resolved = _selectAliases[rawColumnName];
-                
+
                 if (resolved == rawColumnName) {
                     return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
                 }
@@ -1065,6 +1066,17 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitStringExpr([NotNull] SqlParserParser.StringExprContext context) {
             return new LinqConstantNode { Value = context.GetText().Trim('\'') };
+        }
+
+        // String concatenation: a || b  →  string.Concat(a, b)
+        // Also handles CONCAT(a, b) via stringFunc2Expr → LinqStringFunctionNode
+
+        public override LinqNode VisitConcatExpr([NotNull] SqlParserParser.ConcatExprContext context) {
+            var left = Visit(context.left);
+            var right = Visit(context.right);
+            return new LinqIdentifierNode {
+                Name = $"string.Concat({left.ToCodeString()}, {right.ToCodeString()})"
+            };
         }
     }
 }
