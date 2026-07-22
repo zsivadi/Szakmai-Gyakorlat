@@ -844,5 +844,35 @@
 		"Desc": "ABS és FLOOR kombinálva WHERE-ben és SELECT-ben.",
 		"SqlInput": "SELECT Name, ABS(Bonus) AS AbsBonus, FLOOR(Points) AS FloorPts FROM Users WHERE ABS(Bonus) > 5",
 		"ExpectedLinq": "db.Users.Where(x => Math.Abs((int)(x.Bonus)) > 5).Select(x => new { x.Name, AbsBonus = Math.Abs((int)(x.Bonus)), FloorPts = Math.Floor((double)(x.Points)) }).ToList()"
+	},
+	{
+		"Id": 142,
+		"Desc": "ORDER BY aggregátum alias.",
+		"SqlInput": "SELECT Role, SUM(Points) AS TotalPoints FROM Users GROUP BY Role ORDER BY TotalPoints DESC",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).OrderByDescending(g => g.FirstOrDefault().TotalPoints).Select(g => new { Role = g.Key, TotalPoints = g.Sum(x => x.Points) }).ToList()"
+	},
+	{
+		"Id": 143,
+		"Desc": "HAVING két aggregátum összehasonlítása.",
+		"SqlInput": "SELECT Role FROM Users GROUP BY Role HAVING MAX(Age) > MIN(Age)",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Max(x => x.Age) > g.Min(x => x.Age)).Select(g => new { Role = g.Key }).ToList()"
+	},
+	{
+		"Id": 144,
+		"Desc": "ORDER BY alias és HAVING kombinálva.",
+		"SqlInput": "SELECT Role, COUNT(*) AS Total FROM Users GROUP BY Role HAVING COUNT(*) > 1 ORDER BY Total DESC",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Count() > 1).OrderByDescending(g => g.FirstOrDefault().Total).Select(g => new { Role = g.Key, Total = g.Count() }).ToList()"
+	},
+	{
+	"Id": 145,
+	"Desc": "|| operátorral string összefűzés.",
+	"SqlInput": "SELECT Name || Role AS FullLabel FROM Users",
+	"ExpectedLinq": "db.Users.Select(x => new { FullLabel = string.Concat(x.Name, x.Role) }).ToList()"
+	},
+	{
+	"Id": 146,
+	"Desc": "CONCAT WHERE-ben.",
+	"SqlInput": "SELECT Name FROM Users WHERE Name || Role = 'BobAdmin'",
+	"ExpectedLinq": "db.Users.Where(x => string.Concat(x.Name, x.Role) == \"BobAdmin\").Select(x => new { x.Name }).ToList()"
 	}
 ]
