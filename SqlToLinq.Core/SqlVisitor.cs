@@ -64,8 +64,13 @@ namespace SqlToLinq.Core {
 
             if (selectCtx.groupClause() == null) return new List<string>();
 
-            return selectCtx.groupClause().idList().IDENTIFIER()
-                .Select(id => ToPascalCase(id.GetText()))
+            return selectCtx.groupClause().groupItem()
+                .Select(item => {
+                    var ids = item.IDENTIFIER();
+                    return ids.Length == 2
+                        ? $"{ids[0].GetText()}.{ToPascalCase(ids[1].GetText())}"
+                        : ToPascalCase(ids[0].GetText());
+                })
                 .ToList();
         }
 
@@ -114,10 +119,10 @@ namespace SqlToLinq.Core {
             // arbitrary number of JOIN / CROSS JOIN clauses be stacked instead of only ever
             // supporting exactly one.
 
-            BuildJoinChain(fromCtx, baseAlias, queryNode);
-
             bool hasJoin = fromCtx.joinClause().Length > 0;
             _hasJoin = hasJoin;
+
+            BuildJoinChain(fromCtx, baseAlias, queryNode);
 
             // WHERE 
 
@@ -365,7 +370,6 @@ namespace SqlToLinq.Core {
                     queryNode.SourceTable = joinTable;
 
                     aliasAccessPrefix.Clear();
-
                     aliasAccessPrefix[joinAlias] = joinAlias;
                     aliasAccessPrefix[baseAlias] = baseAlias;
 
@@ -380,7 +384,6 @@ namespace SqlToLinq.Core {
 
                     var onCondition = joinCtx.condition();
                     if (!(onCondition is SqlParserParser.CompareConditionContext cmpCtx) || cmpCtx.op.GetText() != "=") {
-
                         throw new NotSupportedException(
                             "[ERROR] RIGHT JOIN ON condition must be a simple equality (a.Key = b.Key).");
                     }
@@ -400,10 +403,8 @@ namespace SqlToLinq.Core {
                     _joinKeyAliasMap = null;
 
                     string wrapperName = $"j{joinStepIndex}";
-
                     aliasAccessPrefix[joinAlias] = $"{wrapperName}.{joinAlias}";
                     aliasAccessPrefix[baseAlias] = $"{wrapperName}.{baseAlias}";
-
                     previousWrapper = wrapperName;
 
                 } else {
@@ -468,21 +469,38 @@ namespace SqlToLinq.Core {
 
             var onCondition = joinCtx.condition();
 
-            if (!(onCondition is SqlParserParser.CompareConditionContext cmpCtx) || cmpCtx.op.GetText() != "=") {
-                throw new NotSupportedException(
-                    "[ERROR] JOIN ON condition must be a simple equality (a.Key = b.Key).");
+            if (onCondition is SqlParserParser.CompareConditionContext cmpCtx && cmpCtx.op.GetText() == "=") {
+
+                var (outerKey, innerKey) = ResolveJoinKeys(cmpCtx, joinAlias, aliasAccessPrefix);
+
+                queryNode.Methods.Add(new LinqJoinNode {
+                    InnerTable = joinTable,
+                    OuterParam = outerParam,
+                    InnerParam = joinAlias,
+                    OuterKey = outerKey,
+                    InnerKey = innerKey,
+                    ResultSelector = flattenResultSelector,
+                });
+
+            } else {
+
+                queryNode.Methods.Add(new LinqCrossJoinNode {
+                    InnerTable = joinTable,
+                    OuterParam = outerParam,
+                    InnerParam = joinAlias,
+                    ResultSelector = flattenResultSelector,
+                });
+
+                _joinKeyAliasMap = null;
+                LinqNode filterExpr = Visit(onCondition);
+
+                queryNode.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Where",
+                    Arguments = new List<LinqNode> {
+                        new LinqLambdaNode { ParameterName = "x", Body = filterExpr }
+                    }
+                });
             }
-
-            var (outerKey, innerKey) = ResolveJoinKeys(cmpCtx, joinAlias, aliasAccessPrefix);
-
-            queryNode.Methods.Add(new LinqJoinNode {
-                InnerTable = joinTable,
-                OuterParam = outerParam,
-                InnerParam = joinAlias,
-                OuterKey = outerKey,
-                InnerKey = innerKey,
-                ResultSelector = flattenResultSelector,
-            });
         }
 
         private void AddLeftJoinStep(
@@ -624,8 +642,15 @@ namespace SqlToLinq.Core {
 
                 string aliasName = item.IDENTIFIER() != null ? item.IDENTIFIER().GetText() : null;
 
-                if (aliasName == null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
-                    aliasName = ToPascalCase(colCtx.GetText());
+                if (aliasName == null && exprNode is LinqIdentifierNode idNode) {
+                    string code = idNode.Name;
+                    if (code == "g.Key") {
+                        if (item.expr() is SqlParserParser.ColumnExprContext colCtx2) {
+                            aliasName = ToPascalCase(colCtx2.GetText());
+                        }
+                    } else if (code.StartsWith("g.Key.")) {
+                        aliasName = code.Substring("g.Key.".Length);
+                    }
                 }
 
                 anonNode.Properties.Add((aliasName, exprNode));
@@ -637,7 +662,9 @@ namespace SqlToLinq.Core {
 
         private static readonly System.Collections.Generic.HashSet<string> StringFunctions =
             new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) {
-                "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH"
+                "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH",
+                "ABS", "FLOOR", "CEIL", "CEILING", "SQRT", "SIGN", "ROUND",
+                "COALESCE", "NULLIF"
             };
 
         public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
@@ -943,11 +970,15 @@ namespace SqlToLinq.Core {
 
                         insideGroupBySelect = true;
 
-                        var idNodes = selectCtx.groupClause().idList().IDENTIFIER();
+                        var groupKeys = selectCtx.groupClause().groupItem()
+                            .Select(item => {
+                                var ids = item.IDENTIFIER();
+                                return ids.Length == 2
+                                    ? ToPascalCase(ids[1].GetText())
+                                    : ToPascalCase(ids[0].GetText());
+                            }).ToList();
 
-                        if (idNodes != null && idNodes.Length > 0) {
-
-                            var groupKeys = idNodes.Select(id => ToPascalCase(id.GetText())).ToList();
+                        if (groupKeys.Count > 0) {
 
                             if (groupKeys.Contains(rawColumnName)) {
                                 if (groupKeys.Count == 1) {
@@ -974,6 +1005,37 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitNumberExpr([NotNull] SqlParserParser.NumberExprContext context) {
             return new LinqConstantNode { Value = int.Parse(context.GetText()) };
+        }
+
+        public override LinqNode VisitFloatExpr([NotNull] SqlParserParser.FloatExprContext context) {
+            return new LinqConstantNode { Value = double.Parse(context.GetText(), System.Globalization.CultureInfo.InvariantCulture) };
+        }
+
+        // Parenthesized expression: (expr)
+
+        public override LinqNode VisitParenExpr([NotNull] SqlParserParser.ParenExprContext context) {
+            return new LinqParensNode { InnerNode = Visit(context.expr()) };
+        }
+
+        // COUNT(DISTINCT col) — maps to .Select(x => x.Col).Distinct().Count()
+        // but inside GROUP BY context it maps to g.Select(x => x.Col).Distinct().Count()
+
+        public override LinqNode VisitDistinctAggregateExpr([NotNull] SqlParserParser.DistinctAggregateExprContext context) {
+
+            string rawName = context.IDENTIFIER().GetText().ToUpperInvariant();
+
+            if (rawName != "COUNT") {
+                throw new NotSupportedException(
+                    $"[ERROR] DISTINCT is only supported inside COUNT(). Got: {rawName}(DISTINCT ...).");
+            }
+
+            _inAggregate = true;
+            LinqNode argNode = Visit(context.expr());
+            _inAggregate = false;
+
+            return new LinqIdentifierNode {
+                Name = $"g.Select(x => {argNode.ToCodeString()}).Distinct().Count()"
+            };
         }
 
         // String literal processing, converting to C# string constant

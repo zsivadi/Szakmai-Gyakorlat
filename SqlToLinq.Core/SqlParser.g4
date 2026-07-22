@@ -40,7 +40,9 @@ columnList : STAR
 
 selectItem : expr (AS? IDENTIFIER)? ;
 
-groupClause : GROUP BY idList ;
+groupClause : GROUP BY groupItem (COMMA groupItem)* ;
+
+groupItem : IDENTIFIER (DOT IDENTIFIER)? ;
 
 idList : IDENTIFIER (COMMA IDENTIFIER)* ;
 
@@ -74,20 +76,19 @@ condition : '(' condition ')'                                       # parensCond
 
 exprList : expr (COMMA expr)* ;
 
-expr : left=expr op=mathOp right=expr                 		# mathExpr
-     | IDENTIFIER '(' (STAR | expr) ')'              		# aggregateExpr
-     | IDENTIFIER '(' expr COMMA expr ')'            		# stringFunc2Expr
-     | IDENTIFIER '(' expr COMMA expr COMMA expr ')' 		# stringFunc3Expr
-     | caseExpr                                       		# caseExprAlt
-     | IDENTIFIER DOT IDENTIFIER                     		# qualifiedColumnExpr
-     | IDENTIFIER                                     		# columnExpr
-     | NUMBER                                          		# numberExpr
-     | STRING_LITERAL                                  		# stringExpr
+expr : left=expr op=mathOp right=expr                          # mathExpr
+     | IDENTIFIER '(' DISTINCT expr ')'                        # distinctAggregateExpr
+     | IDENTIFIER '(' (STAR | expr) ')'                        # aggregateExpr
+     | IDENTIFIER '(' expr COMMA expr ')'                      # stringFunc2Expr
+     | IDENTIFIER '(' expr COMMA expr COMMA expr ')'           # stringFunc3Expr
+     | caseExpr                                                 # caseExprAlt
+     | '(' expr ')'                                            # parenExpr
+     | IDENTIFIER DOT IDENTIFIER                               # qualifiedColumnExpr
+     | IDENTIFIER                                              # columnExpr
+     | NUMBER                                                    # numberExpr
+     | FLOAT                                                     # floatExpr
+     | STRING_LITERAL                                            # stringExpr
      ;
-
-// CASE WHEN c1 THEN r1 WHEN c2 THEN r2 ELSE rn END
-// Both searched form (CASE WHEN condition THEN ...) and
-// simple form (CASE expr WHEN value THEN ...) are supported.
 
 caseExpr : CASE caseOperand=expr? (WHEN condition THEN expr)+ (ELSE elseExpr=expr)? END ;
 
@@ -157,7 +158,8 @@ MINUS : '-' ;
 DIV   : '/' ;
 
 IDENTIFIER     : [a-zA-Z_][a-zA-Z0-9_]* ; 
-NUMBER         : [0-9]+ ;                 
+FLOAT          : [0-9]+ '.' [0-9]+ ;
+NUMBER         : [0-9]+ ;
 STRING_LITERAL : '\'' ~'\''* '\'' ;       
 
 WS : [ \t\r\n]+ -> skip ;

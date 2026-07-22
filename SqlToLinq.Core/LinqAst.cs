@@ -111,7 +111,6 @@ namespace SqlToLinq.Core {
         public override string ToCodeString() {
 
             var valuesStr = string.Join(", ", Values.Select(v => v.ToCodeString()));
-
             bool allNumeric = Values.All(v => v is LinqConstantNode c && c.Value is not string);
             string arrayType = allNumeric ? "int?" : "string";
 
@@ -142,6 +141,9 @@ namespace SqlToLinq.Core {
 
             if (Value is string str) {
                 return $"\"{str}\"";
+            }
+            if (Value is double d) {
+                return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
             return Value?.ToString() ?? "null";
         }
@@ -205,10 +207,19 @@ namespace SqlToLinq.Core {
                 "SUBSTRING" => $"{arg0}.Substring({arg1} - 1, {arg2})",
                 "COALESCE" => $"({arg0} ?? {arg1})",
                 "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
+                "ROUND" => arg1 != "" ? $"Math.Round((double)({arg0}), {arg1})" : $"Math.Round((double)({arg0}))",
+                "ABS" => $"Math.Abs((int)({arg0}))",
+                "FLOOR" => $"Math.Floor((double)({arg0}))",
+                "CEIL" => $"Math.Ceiling((double)({arg0}))",
+                "CEILING" => $"Math.Ceiling((double)({arg0}))",
+                "POWER" => $"Math.Pow((double)({arg0}), (double)({arg1}))",
+                "SQRT" => $"Math.Sqrt((double)({arg0}))",
+                "SIGN" => $"Math.Sign((int)({arg0}))",
 
                 _ => throw new System.NotSupportedException(
                     $"[ERROR] Unsupported function: '{FunctionName}'. " +
-                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LEN, LENGTH, SUBSTRING, COALESCE, NULLIF.")
+                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, " +
+                    $"COALESCE, NULLIF, ROUND, ABS, FLOOR, CEIL, CEILING, POWER, SQRT, SIGN.")
             };
         }
     }
