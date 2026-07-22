@@ -15,7 +15,6 @@
 \usepackage{booktabs}
 \usepackage{longtable}
 
-% minted beállítások
 \setminted[csharp]{
   bgcolor=gray!8,
   fontsize=\small,
@@ -25,7 +24,6 @@
   style=tango,
 }
 
-% "Ábra" felirat és római számozás a listing floathoz
 \renewcommand{\listingscaption}{Ábra}
 \makeatletter
 \AtBeginDocument{%
@@ -103,7 +101,7 @@ Ezen különbségek áthidalására a fejlesztők a múltban gyakran nyers SQL l
 
 \subsection{Az SQL és LINQ típusrendszerének kapcsolata}
 
-A LINQ kétféle szintaxisban írható fel: lekérdezési szintaxisban (\emph{query syntax}), amely az SQL-hez hasonló kulcsszavakat használ, és metódusszintaxisban (\emph{method syntax}), amely láncolt metódushívásokból áll. A transzpiler az utóbbit generálja, mivel az programozottan könnyebben állítható elő. A lekérdezési lánc általános alakja:
+A LINQ kétféle szintaxisban írható fel. Lekérdezési szintaxisban (\emph{query syntax}), amely az SQL-hez hasonló kulcsszavakat használ, és metódusszintaxisban (\emph{method syntax}), amely láncolt metódushívásokból áll. A fordító az utóbbit generálja, mivel az programozottan könnyebben állítható elő. A lekérdezési lánc általános alakja:
 
 \begin{listing}[H]
 \begin{minted}{csharp}
@@ -118,18 +116,52 @@ db.Tabla
 \caption{LINQ metódusszintaxis általános alakja}
 \end{listing}
  
-A lánc sorrendje nem tetszőleges: a LINQ kiértékelési szemantikája megköveteli, hogy a szűrés (\texttt{Where}) a vetítés (\texttt{Select}) előtt, a lapozás (\texttt{Take}/\texttt{Skip}) pedig az összes többi művelet után következzen. Ez tükrözi az SQL végrehajtási sorrendjét: 
+A lánc sorrendje nem tetszőleges, a LINQ kiértékelési szemantikája megköveteli, hogy a szűrés (\texttt{Where}) a vetítés (\texttt{Select}) előtt, a lapozás (\texttt{Take}/\texttt{Skip}) pedig az összes többi művelet után következzen. Ez tükrözi az SQL végrehajtási sorrendjét: 
 \texttt{FROM} $\to$ \texttt{WHERE} $\to$ \texttt{GROUP BY} $\to$ \texttt{HAVING} $\to$ \texttt{SELECT} $\to$ \texttt{DISTINCT} $\to$ \texttt{ORDER BY} $\to$ \texttt{LIMIT}.
 
 \subsection{A manuális átírás problémái}
 
-Nagyobb méretű legacy rendszerek modernizálása során gyakori feladat a több ezer soros, elavult adatbázis-hívások átírása modern, Entity Framework Core alapú LINQ kifejezésekké. Ennek manuális elvégzése rendkívül időigényes, monoton és hibalehetőségekkel teli folyamat. A két nyelv szintaxisa és operátor-készlete közötti rejtett különbségek könnyen nehezen felderíthető logikai hibákhoz vezethetnek. Szemléletes példa erre a logikai operátorok precedenciájának eltérése: míg az SQL-ben a \texttt{NOT} operátor egyértelműen a teljes relációra vonatkoztatható anélkül, hogy típuskonfliktust okozna, addig a C\# \texttt{!} operátorának magasabb precedenciája miatt a kézi átírás során a megfelelő zárójelezés elhagyása azonnali fordítási hibát eredményezhet.
+Nagyobb méretű legacy rendszerek modernizálása során gyakori feladat a több ezer soros, elavult adatbázis-hívások átírása modern, Entity Framework Core alapú LINQ kifejezésekké. Ennek manuális elvégzése rendkívül időigényes, monoton és hibalehetőségekkel teli folyamat. A két nyelv szintaxisa és operátor-készlete közötti rejtett különbségek könnyen nehezen felderíthető logikai hibákhoz vezethetnek. Szemléletes példa lehet erre a logikai operátorok precedenciájának eltérése. Míg az SQL-ben a \texttt{NOT} operátor egyértelműen a teljes relációra vonatkoztatható anélkül, hogy típuskonfliktust okozna, addig a C\# \texttt{!} operátorának magasabb precedenciája miatt a kézi átírás során a megfelelő zárójelezés elhagyása azonnali fordítási hibát eredményezhet.
 
 Ezen karbantartási és migrációs problémák kiküszöbölésére hatékony megoldást jelenthet egy transpiler megtervezése és alkalmazása. Egy ilyen eszköz létrehozása azonban specifikus technológiai kihívásokat is tartogat. Mivel a két nyelv nem feleltethető meg egymásnak egy az egyben, a fordítónak intelligens módon kell áthidalnia a hiányosságokat. Nem minden SQL utasításnak vagy beépített adatbázis függvénynek van közvetlen C\# megfelelője. Például az SQL \texttt{LIKE} operátorának és helyettesítő karaktereinek transzpilálása komplex reguláris kifejezések (regexek) generálását igényeli. Továbbá a fordító által előállított LINQ kódnak nem csupán szintaktikailag kell helyesnek lennie, hanem illeszkednie kell az Entity Framework kifejezésfa (Expression Tree) kiértékelési mechanizmusaihoz is, elkerülve a nem támogatott szerveroldali fordításokat és a teljesítményt rontó kliensoldali adatfeldolgozást \cite{nmorph2023}.
 
 \section{Szakirodalmi áttekintés}
 
-\section{Tervezés}
+A fordító több egymástól eltérő, de szorosan összefüggő kutatási területre támaszkodik: a fordítóprogram-elméletre és az ehhez kapcsolódó eszközökre, az objektum-relációs leképezés problémakörére, a LINQ és az Entity Framework Core belső működésére, valamint a transpilerek ipari alkalmazásaira.
+
+\subsection{Fordítóprogram-eszközök és az ANTLR}
+
+A fordító megvalósításának alapját Terence Parr \textit{The Definitive ANTLR 4 Reference} \cite{parr2013antlr4} című munkája adja. Ez az átfogó referenciamű tárgyalja az ANTLR~4 parser generátor működését, a kontextusfüggetlen grammatikák írásának módszertanát, a lexer és parser automatikus előállítását, valamint a parse fa bejárásának két fő mintáját, a listener- és a visitor-alapú megközelítést. Az ANTLR~4 egyik legfontosabb újítása a korábbi verziókhoz képest az Adaptive~LL(*) (ALL*) algoritmus, amely a hagyományos LL(k) elemzőknél rugalmasabban kezeli a grammatikai kétértelműségeket és nem igényel bal-rekurzió eltávolítást. A projekt szempontjából különösen releváns a könyv visitor mintával foglalkozó fejezete, mivel a projekt látogató (visitor) alapú megközelítést használ. A látogató lehetővé teszi, hogy a parse fa bejárásakor minden csomóponttípushoz külön feldolgozási logikát rendeljünk, és a visszatérési értéket felfelé propagáljuk a fában. Ezt a mechanizmust alkalmazza a fordító \texttt{SqlVisitor} osztálya is.
+
+Parr korábbi, \textit{Language Implementation Patterns} \cite{parr2009lip} munkája tágabb elméleti kontextusba helyezi az ANTLR-t és általában a nyelvfeldolgozás tervezési mintáit. A könyv külön mintaként tárgyalja a külső fa-látogatót (external tree visitor), amelynek lényege, hogy az AST csomópontjain végzett műveletek logikája elkülönül magától a fastruktúrától. Ez a szétválasztás lehetővé teszi, hogy ugyanazon szintaxisfát különböző célokra járjuk be anélkül, hogy a csomópontok definícióját módosítani kellene. A projekt is ezt az elvet követ. Az ANTLR által generált parse fán a \texttt{SqlVisitor} halad végig, és egy saját, a LINQ kódgeneráláshoz optimalizált absztrakt szintaxisfát (\texttt{LinqNode} hierarchiát) épít fel belőle. Ez utóbbi aztán a \texttt{ToCodeString()} metóduson keresztül állítja elő a végleges C\# forráskódot.
+
+Ortin és társai \cite{ortin2022antlr} empirikus összehasonlítást végeztek az ANTLR és a hagyományos Lex/Yacc eszközpáros között. Eredményeik szerint az ANTLR szignifikánsan alacsonyabb fejlesztési időt és hibaarányt eredményez, különösen összetett, több alternatívát tartalmazó grammatikák esetén. Ez megerősíti az ANTLR választásának indokoltságát a projektben, ahol a teljes SQL \texttt{SELECT} szintaxis lefedése volt a cél.
+
+\subsection{Objektum-relációs impedancia-eltérés}
+
+Az objektum-relációs impedancia-eltérés (object-relational impedance mismatch, ORIM) problémáját a szakirodalom régóta ismeri. Neward ezt a szembenállást találóan a számítástechnika Vietnámjaként jellemezte \cite{neward2006vietnam}, arra utalva, hogy az összekapcsolás látszólag egyszerű feladatnak tűnik, ám a megvalósítás során egyre mélyebb és nehezebben feloldható ellentmondások bukkannak fel. Ireland és társai \cite{ireland2009orim} strukturált keretrendszert dolgoztak ki az eltérések osztályozására, és négy fő kategóriát azonosítottak: adatmodell-eltérés (az objektumgráf és a relációs táblaszerkezet között), sémabeli eltérés (az öröklés és polimorfizmus vs.\ egyforma sorok), adatmanipulációs eltérés (az OOP metódushívásai vs.\ a halmazorientált SQL), valamint tranzakciós eltérés (az objektum életciklusa vs.\ a tranzakció határai). A fordító tervezésekor mindegyik kategória konkrét megvalósítási kihívásként jelentkezett. Például az SQL \texttt{NULL} kezelése alapvetően eltér a C\# nullable típusaitól, az SQL aggregátumok csoportosított adathalmazon értelmezettek, míg a LINQ aggregátumok az \texttt{IEnumerable} interfészen dolgoznak.
+
+Papaioannou és Katsanos \cite{papaioannou2020orim} 2020-as empirikus vizsgálata az ORIM hatásait mérte ORM keretrendszerek teljesítményére. Eredményeik rávilágítanak arra, hogy az ORM által generált SQL lekérdezések egyes esetekben lényegesen kevésbé hatékonyak a kézzel írott megfelelőiknél, különösen összetett JOIN műveleteket és aggregációkat tartalmazó lekérdezéseknél. Ez a megfigyelés relevanciával bír a projekt egyik tervezési döntésénél, mivel a transpiler által generált LINQ kódnak nemcsak szintaktikailag kell helyesnek lennie, hanem az Entity Framework Core query provider számára szerver oldalon lefordíthatónak is, elkerülve a teljesítményt rontó kliensoldali kiértékelést.
+
+\subsection{LINQ és az Entity Framework Core}
+
+A LINQ elméleti és gyakorlati hátterét Jon Skeet \textit{C\# in Depth} \cite{skeet2019csharp} munkája tárgyalja részletesen. A könyv különös figyelmet szentel a lusta kiértékelés (deferred execution) mechanizmusának, a kifejezésfa (expression tree) és az \texttt{IQueryable<T>} interfész kapcsolatának. Amíg a lekérdezés \texttt{IQueryable<T>} formában él, az EF Core képes azt kifejezésfaként elemezni és SQL-re fordítani. Amint azonban \texttt{IEnumerable<T>}-vé válik (pl.\ egy közbülső \texttt{ToList()} hívás következtében), az EF Core elveszti a SQL-generálás lehetőségét, és a kiértékelés C\# szinten, a memóriában folytatódik. A könyv továbbá hangsúlyozza, hogy a LINQ metódusszintaxisa (method syntax) és lekérdezési szintaxisa (query syntax) szemantikailag ekvivalens, azonban az előbbi programozottan könnyebben előállítható.
+
+Freeman és Rattz \cite{freeman2010prolinq} könyve a LINQ teljes spektrumát lefedi. A projekt szempontjából különösen értékes a JOIN operátorok részletes tárgyalása. A \texttt{GroupJoin + SelectMany(DefaultIfEmpty)} kombináció mint a \texttt{LEFT OUTER JOIN} LINQ-beli megfelelője, az equi-join (.Join()) és a nem egyenlőség alapú (SelectMany + Where) JOIN-ok különbségei, valamint a több táblát érintő join-láncok felépítése. Ezek az ismeretek közvetlenül hasznosultak a fordító JOIN-kezelési logikájának tervezésekor.
+
+A Microsoft hivatalos EF Core dokumentációja \cite{mslearn2023efcore} részletezi, hogy az EF Core provider egyes LINQ operátorokat (mint például a \texttt{GroupJoin}) nem minden adatbázis-provider esetén képes szerver oldalon SQL-re fordítani. Ez a korlát a projekt tesztelési infrastruktúrájában is konkrét kihívásként jelentkezett, mivel az SQLite provider nem fordítja szerver oldalra a \texttt{GroupJoin} alapú LEFT/RIGHT JOIN mintákat, ami azt jelenti, hogy a lánc kliensoldali LINQ-to-Objects módban fut le, ahol a \texttt{DefaultIfEmpty()} ténylegesen \texttt{null} objektumot szúr be, és az azt követő tulajdonság-hozzáférések \texttt{NullReferenceException}-t dobhatnak. Az outer join szemantikai tesztelésére ezért egy dedikált, null-mentes seed adatokkal dolgozó adatbázis-sémán történik.
+
+\subsection{Roslyn és kódgenerálás}
+
+A jelen projekt tesztelési infrastruktúrájában a Microsoft Roslyn fordítóplatform is szerepet kapott. Vasani \cite{vasani2017roslyn} és Harrison \cite{harrison2017codegen} munkái részletesen tárgyalják a Roslyn \textit{Compiler as a Service} megközelítést, amelynek keretében a C\# fordítófolyamat programozottan érhető el, lehetővé téve szintaktikai fák elemzését, szemantikai modellezést, kódgenerálást, valamint dinamikus kódfordítást és futtatást memóriában. A \texttt{FuzzTests} osztály a Roslyn \texttt{SyntaxFactory.ParseExpression()} metódusát alkalmazza a generált LINQ kifejezések szintaktikai érvényességének ellenőrzésére. Ez lehetővé teszi, hogy véletlenszerűen generált SQL lekérdezések LINQ-ra fordított kimenete szintaxishibák szempontjából anélkül legyen vizsgálható, hogy az érintett táblák valóban léteznének az adatbázisban.
+
+\subsection{Transpilerek az iparban}
+
+Az nMorph keretrendszer \cite{nmorph2023} egy transpiler-alapú megközelítést mutat be több programozási nyelvet érintő szoftverfejlesztési problémák megoldására. A keretrendszer rávilágít arra, hogy a transpiler-technológia nemcsak kód-migrációra alkalmazható, hanem általánosabb, többnyelvű szoftverfejlesztési munkafolyamatok automatizálásának eszközeként is.
+
+Borne \cite{borne2021transpiler} esettanulmánya egy valódi ipari transpiler megvalósítását mutatja be, amely egy Oracle PL/SQL kódbázist fordít PostgreSQL-re. A cikk részletezi a megközelítés architektúráját, és hangsúlyozza, hogy az automatizált kódfordítás soha nem lehet teljes körű, mivel bizonyos konstrukciók, amelyek az egyik rendszerben természetesek, a másikban nem fejezhetők ki közvetlenül. Ez a megfigyelés összhangban van a projekt során szerzett tapasztalatokkal, mivel a SQL nyelv egyes elemei, például a \texttt{FULL OUTER JOIN}, a közös táblakifejezések (CTE) és az ablakfüggvények (\texttt{ROW\_NUMBER}, \texttt{RANK}) nem rendelkeznek LINQ-ban olyan közvetlen megfelelővel, amely az Entity Framework Core által szerveroldali SQL-lekérdezéssé fordítható. Emiatt ezeknek a konstrukcióknak a támogatása a transpiler jelenlegi hatókörén kívül esik.
+
+
 
 \section{Megvalósítás}
 
