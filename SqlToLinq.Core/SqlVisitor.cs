@@ -13,10 +13,12 @@ namespace SqlToLinq.Core {
         private bool _inWhereClause = false;
         private bool _inAggregate = false;
         private bool _hasJoin = false;
+        private bool _inOrderBy = false;
 
         // Active only while resolving a single join step's ON-condition and flatten expressions.
         // Maps each alias visible at that point to the C# expression prefix needed to reach its
         // entity from within that step's outer/inner lambda scope (see the JOIN loop below).
+
         private Dictionary<string, string> _joinKeyAliasMap = null;
 
         private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
@@ -42,20 +44,26 @@ namespace SqlToLinq.Core {
 
             if (string.IsNullOrEmpty(input)) return input;
 
-            var parts = input.Split('_');
-            var sb = new StringBuilder();
+            bool isSnakeCase = input.Contains('_');
 
-            foreach (var part in parts) {
-                if (part.Length == 0) continue;
-
-                sb.Append(char.ToUpper(part[0]));
-
-                if (part.Length > 1) {
-                    sb.Append(part.Substring(1).ToLower());
+            if (isSnakeCase) {
+                var parts = input.Split('_');
+                var sb = new StringBuilder();
+                foreach (var part in parts) {
+                    if (part.Length == 0) continue;
+                    sb.Append(char.ToUpper(part[0]));
+                    if (part.Length > 1) sb.Append(part.Substring(1).ToLower());
                 }
+                return sb.Length > 0 ? sb.ToString() : input;
             }
 
-            return sb.Length > 0 ? sb.ToString() : input;
+            bool isMixedCase = input.Any(char.IsUpper) && input.Any(char.IsLower);
+
+            if (isMixedCase) {
+                return char.ToUpper(input[0]) + input.Substring(1);
+            }
+
+            return char.ToUpper(input[0]) + input.Substring(1).ToLower();
         }
 
         // GROUP BY columns extraction
@@ -81,10 +89,14 @@ namespace SqlToLinq.Core {
             if (columnList == null || columnList.STAR() != null) return aliases;
 
             foreach (var item in columnList.selectItem()) {
-                if (item.IDENTIFIER() != null && item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+                if (item.IDENTIFIER() != null) {
                     string alias = ToPascalCase(item.IDENTIFIER().GetText());
-                    string original = ToPascalCase(colCtx.GetText());
-                    aliases[alias] = original;
+                    if (item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+                        string original = ToPascalCase(colCtx.GetText());
+                        aliases[alias] = original;
+                    } else {
+                        aliases[alias] = alias;
+                    }
                 }
             }
             return aliases;
@@ -112,7 +124,7 @@ namespace SqlToLinq.Core {
             var queryNode = new LinqQueryNode { SourceTable = baseTable };
 
             // JOIN
-            //
+
             // Each join step consumes either the raw base table (for the very first join) or the
             // flattened wrapper object produced by the previous step, and always flattens its own
             // result the same way. See BuildJoinChain for the details; this is what lets an
@@ -175,7 +187,9 @@ namespace SqlToLinq.Core {
 
             if (context.havingClause() != null) {
 
+                _inAggregate = true;
                 var havingCondition = Visit(context.havingClause().condition());
+                _inAggregate = false;
 
                 var havingMethod = new LinqMethodCallNode { MethodName = "Where" };
 
@@ -220,7 +234,9 @@ namespace SqlToLinq.Core {
                 for (int i = 0; i < orderItems.Length; i++) {
 
                     var item = orderItems[i];
+                    _inOrderBy = true;
                     var itemNode = Visit(item.expr());
+                    _inOrderBy = false;
                     bool isDesc = item.DESC() != null;
 
                     string methodName = i == 0
@@ -953,7 +969,14 @@ namespace SqlToLinq.Core {
 
             string rawColumnName = ToPascalCase(context.GetText());
 
-            if (_selectAliases.ContainsKey(rawColumnName)) {
+            if (_inOrderBy && _selectAliases.ContainsKey(rawColumnName)) {
+                string resolved = _selectAliases[rawColumnName];
+                
+                if (resolved == rawColumnName) {
+                    return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
+                }
+                rawColumnName = resolved;
+            } else if (_selectAliases.ContainsKey(rawColumnName)) {
                 rawColumnName = _selectAliases[rawColumnName];
             }
 
