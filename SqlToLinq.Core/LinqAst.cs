@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Collections.Generic;
 
 namespace SqlToLinq.Core {
@@ -23,6 +24,18 @@ namespace SqlToLinq.Core {
             string result = $"db.{SourceTable}";
 
             foreach (var method in Methods) {
+                result += method.ToCodeString();
+            }
+            return result;
+        }
+
+        public string ToCodeStringUpToSelect() {
+
+            string result = $"db.{SourceTable}";
+
+            foreach (var method in Methods) {
+                if (method is LinqMethodCallNode m &&
+                    (m.MethodName == "Select" || m.MethodName == "ToList")) break;
                 result += method.ToCodeString();
             }
             return result;
@@ -100,7 +113,7 @@ namespace SqlToLinq.Core {
         }
     }
 
-    // IN 
+    // IN (literal list)  or  IN (subquery)
 
     public class LinqInExpressionNode : LinqNode {
 
@@ -108,13 +121,60 @@ namespace SqlToLinq.Core {
 
         public List<LinqNode> Values { get; set; } = new List<LinqNode>();
 
+        public LinqSubqueryNode Subquery { get; set; }
+
         public override string ToCodeString() {
+
+            if (Subquery != null) {
+
+                string inner = ExtractScalarInnerQuery(Subquery.Inner);
+                return $"({inner}).Contains({Target.ToCodeString()})";
+            }
 
             var valuesStr = string.Join(", ", Values.Select(v => v.ToCodeString()));
             bool allNumeric = Values.All(v => v is LinqConstantNode c && c.Value is not string);
             string arrayType = allNumeric ? "int?" : "string";
 
             return $"new {arrayType}[] {{ {valuesStr} }}.Contains({Target.ToCodeString()})";
+        }
+
+        private static string ExtractScalarInnerQuery(LinqNode inner) {
+
+            if (inner is not LinqQueryNode qn) {
+
+                string raw = inner.ToCodeString();
+
+                if (raw.EndsWith(".ToList()")) raw = raw.Substring(0, raw.Length - ".ToList()".Length);
+                return raw;
+            }
+
+            var sb = new System.Text.StringBuilder($"db.{qn.SourceTable}");
+
+            LinqMethodCallNode scalarSelect = null;
+
+            foreach (var method in qn.Methods) {
+
+                if (method is LinqMethodCallNode m) {
+                    if (m.MethodName == "ToList") break;
+                    if (m.MethodName == "Select") { scalarSelect = m; break; }
+                }
+                sb.Append(method.ToCodeString());
+            }
+
+            if (scalarSelect?.Arguments.Count == 1 &&
+                scalarSelect.Arguments[0] is LinqLambdaNode lambda &&
+                lambda.Body is LinqAnonymousObjectNode anon &&
+                anon.Properties.Count == 1) {
+
+                string param = lambda.ParameterName;
+                string colExpr = anon.Properties[0].Expression.ToCodeString();
+
+                sb.Append($".Select({param} => {colExpr})");
+            } else if (scalarSelect != null) {
+                sb.Append(scalarSelect.ToCodeString());
+            }
+
+            return sb.ToString();
         }
     }
 
@@ -279,18 +339,86 @@ namespace SqlToLinq.Core {
         }
     }
 
+    public class LinqSubqueryNode : LinqNode {
+
+        public LinqNode Inner { get; set; }
+
+        public bool AsScalar { get; set; }
+
+        public string OuterParam { get; set; }
+
+        public override string ToCodeString() {
+
+            string inner = Inner.ToCodeString();
+
+            if (inner.EndsWith(".ToList()")) {
+                inner = inner.Substring(0, inner.Length - ".ToList()".Length);
+            }
+
+            if (!AsScalar) return inner;
+
+            bool alreadyScalar = inner.EndsWith(".Count()")
+                || System.Text.RegularExpressions.Regex.IsMatch(
+                       inner, @"\.(Sum|Max|Min|Average)\([^)]*\)$");
+
+            return alreadyScalar ? $"({inner})" : $"({inner}).FirstOrDefault()";
+        }
+    }
+
+    // EXISTS / NOT EXISTS 
+
+    public class LinqExistsNode : LinqNode {
+
+        public LinqSubqueryNode Subquery { get; set; }
+
+        public bool Negated { get; set; }
+
+        public override string ToCodeString() {
+
+            string inner = Subquery.Inner is LinqQueryNode qn
+                ? qn.ToCodeStringUpToSelect()
+                : Subquery.Inner.ToCodeString();
+
+            if (inner.EndsWith(".ToList()")) {
+                inner = inner.Substring(0, inner.Length - ".ToList()".Length);
+            }
+
+            string anyCall = $"({inner}).Any()";
+            return Negated ? $"!{anyCall}" : anyCall;
+        }
+    }
+
     // UNION / UNION ALL / INTERSECT / EXCEPT
 
     public class LinqSetOperationNode : LinqNode {
 
         public LinqNode Left { get; set; }
+
         public LinqNode Right { get; set; }
 
-        // "Union", "Concat" (UNION ALL), "Intersect", "Except"
         public string MethodName { get; set; }
 
         public override string ToCodeString() {
             return $"{Left.ToCodeString()}.{MethodName}({Right.ToCodeString()})";
+        }
+    }
+
+    public class LinqInlineViewQueryNode : LinqNode {
+
+        public string SubqueryCode { get; set; }
+
+        public string Alias { get; set; }
+
+        public List<LinqNode> Methods { get; set; } = new List<LinqNode>();
+
+        public override string ToCodeString() {
+
+            string result = $"({SubqueryCode})";
+
+            foreach (var method in Methods) {
+                result += method.ToCodeString();
+            }
+            return result;
         }
     }
 

@@ -4,6 +4,8 @@ query : selectQuery SEMICOLON? EOF ;
 
 selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
 
+subquery : '(' selectQuery ')' ;
+
 statement : selectStmt 
           | updateStmt 
           | insertStmt 
@@ -21,7 +23,11 @@ insertStmt : INSERT INTO tableName ('(' idList ')')? VALUES '(' valueList ')' ;
 
 deleteStmt : DELETE FROM tableName (WHERE condition)? ;
 
-fromClause : tableRef joinClause* ;
+fromClause : tableSource joinClause* ;
+
+tableSource : tableRef            # tableRefSource
+            | subquery AS? alias  # subquerySource
+            ;
 
 tableRef : tableName (AS? alias)? ;
 
@@ -70,6 +76,8 @@ condition : '(' condition ')'                                       # parensCond
           | left=expr NOT? BETWEEN low=expr AND high=expr           # betweenCondition
           | left=expr IS NOT? NULL_TOKEN                            # isNullCondition
           | left=expr NOT? IN '(' exprList ')'                      # inCondition
+          | left=expr NOT? IN subquery                              # inSubqueryCondition
+          | NOT? EXISTS subquery                                     # existsCondition
           | NOT condition                                           # notCondition
           | left=condition AND right=condition                      # andCondition
           | left=condition OR right=condition                       # orCondition
@@ -85,6 +93,7 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | IDENTIFIER '(' expr COMMA expr ')'                       # stringFunc2Expr
      | IDENTIFIER '(' expr COMMA expr COMMA expr ')'            # stringFunc3Expr
      | caseExpr                                                 # caseExprAlt
+     | subquery                                                 # scalarSubqueryExpr
      | '(' expr ')'                                             # parenExpr
      | IDENTIFIER DOT IDENTIFIER                                # qualifiedColumnExpr
      | IDENTIFIER                                               # columnExpr
@@ -142,6 +151,7 @@ OFFSET		: [Oo][Ff][Ff][Ss][Ee][Tt] ;
 UNION		: [Uu][Nn][Ii][Oo][Nn] ;
 ALL			: [Aa][Ll][Ll] ;
 INTERSECT	: [Ii][Nn][Tt][Ee][Rr][Ss][Ee][Cc][Tt] ;
+EXISTS		: [Ee][Xx][Ii][Ss][Tt][Ss] ;
 EXCEPT		: [Ee][Xx][Cc][Ee][Pp][Tt] ;
 IN      	: [Ii][Nn] ;
 IS      	: [Ii][Ss] ;

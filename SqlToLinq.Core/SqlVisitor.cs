@@ -18,10 +18,18 @@ namespace SqlToLinq.Core {
         // Active only while resolving a single join step's ON-condition and flatten expressions.
         // Maps each alias visible at that point to the C# expression prefix needed to reach its
         // entity from within that step's outer/inner lambda scope (see the JOIN loop below).
+
         private Dictionary<string, string> _joinKeyAliasMap = null;
 
         private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
         private Dictionary<string, string> _tableAliases = new Dictionary<string, string>();
+
+        private readonly Stack<(Dictionary<string, string> TableAliases, string LambdaParam)>
+            _outerScopes = new Stack<(Dictionary<string, string>, string)>();
+
+        // Current innermost lambda parameter (default "x", changes inside JOIN lambdas).
+
+        private string _currentLambdaParam = "x";
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
             return Visit(context.selectQuery());
@@ -47,8 +55,8 @@ namespace SqlToLinq.Core {
 
                 string methodName = isIntersect ? "Intersect"
                                   : isExcept ? "Except"
-                                  : isAll ? "Concat"   
-                                  : "Union";   
+                                  : isAll ? "Concat"
+                                  : "Union";
 
                 result = new LinqSetOperationNode {
                     Left = result,
@@ -136,25 +144,80 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitSelectStmt([NotNull] SqlParserParser.SelectStmtContext context) {
 
+            var savedSelectAliases = _selectAliases;
+            var savedTableAliases = _tableAliases;
+            var savedHasJoin = _hasJoin;
+            var savedLambdaParam = _currentLambdaParam;
+            var savedInWhereClause = _inWhereClause;
+            var savedInAggregate = _inAggregate;
+            var savedInOrderBy = _inOrderBy;
+
+            _inWhereClause = false;
+            _inAggregate = false;
+            _inOrderBy = false;
+
+            _currentLambdaParam = "x";
+
             _selectAliases = BuildSelectAliases(context.columnList());
 
             // FROM clause: base table + optional joins
 
             var fromCtx = context.fromClause();
-            var baseRef = fromCtx.tableRef();
 
-            string baseTable = ToPascalCase(baseRef.tableName().GetText());
-            string baseAlias = baseRef.alias() != null
+            string baseTable;
+            string baseAlias;
+
+            if (fromCtx.tableSource() is SqlParserParser.SubquerySourceContext subSrc) {
+
+                baseAlias = subSrc.alias().GetText();
+
+                _outerScopes.Push((new Dictionary<string, string>(savedTableAliases), savedLambdaParam));
+
+                var innerNode = Visit(subSrc.subquery().selectQuery());
+
+                _outerScopes.Pop();
+
+                string innerCode = innerNode.ToCodeString();
+                if (innerCode.EndsWith(".ToList()")) {
+                    innerCode = innerCode.Substring(0, innerCode.Length - ".ToList()".Length);
+                }
+
+                var viewQuery = new LinqInlineViewQueryNode {
+                    SubqueryCode = innerCode,
+                    Alias = baseAlias
+                };
+
+                _tableAliases = savedTableAliases;
+                _hasJoin = savedHasJoin;
+                _selectAliases = savedSelectAliases;
+                _currentLambdaParam = savedLambdaParam;
+                _inWhereClause = savedInWhereClause;
+                _inAggregate = savedInAggregate;
+                _inOrderBy = savedInOrderBy;
+
+                return BuildInlineViewQuery(context, viewQuery, baseAlias);
+            }
+
+            var baseRef = ((SqlParserParser.TableRefSourceContext)fromCtx.tableSource()).tableRef();
+
+            baseTable = ToPascalCase(baseRef.tableName().GetText());
+            baseAlias = baseRef.alias() != null
                 ? baseRef.alias().GetText()
                 : baseTable.Substring(0, 1).ToLower();
 
-            _tableAliases.Clear();
+            bool hasExplicitAlias = baseRef.alias() != null;
+            bool isNestedQuery = _outerScopes.Count > 0 && savedTableAliases.Count > 0;
+            _currentLambdaParam = (isNestedQuery && hasExplicitAlias) ? baseAlias : "x";
+
+            _tableAliases = new Dictionary<string, string>();
             _tableAliases[baseAlias] = baseTable;
+
+            _outerScopes.Push((_tableAliases, _currentLambdaParam));
 
             var queryNode = new LinqQueryNode { SourceTable = baseTable };
 
             // JOIN
-            
+
             // Each join step consumes either the raw base table (for the very first join) or the
             // flattened wrapper object produced by the previous step, and always flattens its own
             // result the same way. See BuildJoinChain for the details; this is what lets an
@@ -177,7 +240,7 @@ namespace SqlToLinq.Core {
                 var whereMethod = new LinqMethodCallNode { MethodName = "Where" };
 
                 whereMethod.Arguments.Add(new LinqLambdaNode {
-                    ParameterName = "x",
+                    ParameterName = _currentLambdaParam,
                     Body = conditionNode
                 });
 
@@ -297,7 +360,7 @@ namespace SqlToLinq.Core {
 
                 if (globalAggNode.Argument != null) {
                     aggMethod.Arguments.Add(new LinqLambdaNode {
-                        ParameterName = "x",
+                        ParameterName = _currentLambdaParam,
                         Body = globalAggNode.Argument
                     });
                 }
@@ -309,7 +372,7 @@ namespace SqlToLinq.Core {
                 var selectMethod = new LinqMethodCallNode { MethodName = "Select" };
 
                 selectMethod.Arguments.Add(new LinqLambdaNode {
-                    ParameterName = hasGroupBy ? "g" : "x",
+                    ParameterName = hasGroupBy ? "g" : _currentLambdaParam,
                     Body = anonNode
                 });
 
@@ -385,7 +448,103 @@ namespace SqlToLinq.Core {
                 queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
             }
 
+            // Restore outer state
+
+            _outerScopes.Pop();
+            _tableAliases = savedTableAliases;
+            _hasJoin = savedHasJoin;
+            _selectAliases = savedSelectAliases;
+            _currentLambdaParam = savedLambdaParam;
+            _inWhereClause = savedInWhereClause;
+            _inAggregate = savedInAggregate;
+            _inOrderBy = savedInOrderBy;
+
             return queryNode;
+        }
+
+        private LinqNode BuildInlineViewQuery(
+            SqlParserParser.SelectStmtContext context,
+            LinqInlineViewQueryNode viewQuery,
+            string alias) {
+
+            _tableAliases = new Dictionary<string, string> { [alias] = alias };
+            _hasJoin = false;
+            _currentLambdaParam = "x";
+
+            // WHERE
+
+            if (context.condition() != null) {
+
+                _inWhereClause = true;
+                var condNode = Visit(context.condition());
+                _inWhereClause = false;
+
+                viewQuery.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Where",
+                    Arguments = new List<LinqNode> {
+                        new LinqLambdaNode { ParameterName = "x", Body = condNode }
+                    }
+                });
+            }
+
+            // ORDER BY
+
+            if (context.orderClause() != null) {
+
+                var orderItems = context.orderClause().orderItem();
+
+                for (int i = 0; i < orderItems.Length; i++) {
+
+                    _inOrderBy = true;
+                    var itemNode = Visit(orderItems[i].expr());
+                    _inOrderBy = false;
+
+                    bool isDesc = orderItems[i].DESC() != null;
+                    string methodName = i == 0
+                        ? (isDesc ? "OrderByDescending" : "OrderBy")
+                        : (isDesc ? "ThenByDescending" : "ThenBy");
+
+                    viewQuery.Methods.Add(new LinqMethodCallNode {
+                        MethodName = methodName,
+                        Arguments = new List<LinqNode> {
+                            new LinqLambdaNode { ParameterName = "x", Body = itemNode }
+                        }
+                    });
+                }
+            }
+
+            // SELECT columns
+
+            var columnsNode = Visit(context.columnList());
+
+            if (columnsNode is LinqAnonymousObjectNode anonNode) {
+                viewQuery.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Select",
+                    Arguments = new List<LinqNode> {
+                        new LinqLambdaNode { ParameterName = "x", Body = anonNode }
+                    }
+                });
+            }
+
+            // OFFSET / LIMIT
+
+            if (context.offsetClause() != null) {
+                viewQuery.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Skip",
+                    Arguments = new List<LinqNode> { Visit(context.offsetClause().expr()) }
+                });
+            }
+
+            if (context.limitClause() != null) {
+                viewQuery.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Take",
+                    Arguments = new List<LinqNode> { Visit(context.limitClause().expr()) }
+                });
+            }
+
+            viewQuery.Methods.Add(new LinqMethodCallNode { MethodName = "ToList" });
+
+            return viewQuery;
         }
 
         // JOIN chain construction 
@@ -901,6 +1060,50 @@ namespace SqlToLinq.Core {
             return inNode;
         }
 
+        // IN (SELECT ...)
+
+        public override LinqNode VisitInSubqueryCondition([NotNull] SqlParserParser.InSubqueryConditionContext context) {
+
+            var innerNode = Visit(context.subquery().selectQuery());
+            var subquery = new LinqSubqueryNode { Inner = innerNode, AsScalar = false };
+
+            var inNode = new LinqInExpressionNode {
+                Target = Visit(context.left),
+                Subquery = subquery
+            };
+
+            if (context.NOT() != null) {
+                return new LinqUnaryExpressionNode { Operator = "!", Operand = inNode };
+            }
+
+            return inNode;
+        }
+
+        // EXISTS (SELECT ...) / NOT EXISTS (SELECT ...)
+
+        public override LinqNode VisitExistsCondition([NotNull] SqlParserParser.ExistsConditionContext context) {
+
+            var innerNode = Visit(context.subquery().selectQuery());
+            var subquery = new LinqSubqueryNode { Inner = innerNode, AsScalar = false };
+
+            return new LinqExistsNode {
+                Subquery = subquery,
+                Negated = context.NOT() != null
+            };
+        }
+
+        // Scalar subquery in expr position
+
+        public override LinqNode VisitScalarSubqueryExpr([NotNull] SqlParserParser.ScalarSubqueryExprContext context) {
+
+            var innerNode = Visit(context.subquery().selectQuery());
+
+            return new LinqSubqueryNode {
+                Inner = innerNode,
+                AsScalar = true
+            };
+        }
+
         public override LinqNode VisitBooleanColumnCondition([NotNull] SqlParserParser.BooleanColumnConditionContext context) {
             return Visit(context.expr());
         }
@@ -987,14 +1190,25 @@ namespace SqlToLinq.Core {
                 return new LinqIdentifierNode { Name = $"{accessPrefix}.{columnName}" };
             }
 
-            if (_hasJoin) {
-                return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
+            if (_tableAliases.ContainsKey(tableAlias)) {
+                if (_hasJoin) {
+                    return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
+                }
+
+                return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{columnName}" };
+            }
+
+            foreach (var (outerAliases, outerParam) in _outerScopes) {
+                if (outerAliases.ContainsKey(tableAlias)) {
+                    return new LinqIdentifierNode { Name = $"{outerParam}.{columnName}" };
+                }
             }
 
             return new LinqIdentifierNode { Name = $"{tableAlias}.{columnName}" };
         }
 
         // Column expression processing, converting to C# property access, considering GROUP BY context
+
         public override LinqNode VisitColumnExpr([NotNull] SqlParserParser.ColumnExprContext context) {
 
             string rawColumnName = ToPascalCase(context.GetText());
@@ -1012,7 +1226,7 @@ namespace SqlToLinq.Core {
             }
 
             if (_inWhereClause || _inAggregate) {
-                return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
+                return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{rawColumnName}" };
             }
 
             RuleContext current = context.Parent;
@@ -1052,7 +1266,7 @@ namespace SqlToLinq.Core {
                 return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
             }
 
-            return new LinqIdentifierNode { Name = $"x.{rawColumnName}" };
+            return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{rawColumnName}" };
         }
 
         // Number literal processing, converting to C# integer constant
@@ -1102,8 +1316,10 @@ namespace SqlToLinq.Core {
         // Also handles CONCAT(a, b) via stringFunc2Expr → LinqStringFunctionNode
 
         public override LinqNode VisitConcatExpr([NotNull] SqlParserParser.ConcatExprContext context) {
+
             var left = Visit(context.left);
             var right = Visit(context.right);
+
             return new LinqIdentifierNode {
                 Name = $"string.Concat({left.ToCodeString()}, {right.ToCodeString()})"
             };
