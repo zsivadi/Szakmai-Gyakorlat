@@ -54,7 +54,6 @@ namespace SqlToLinq.Tests {
         public string NextSelect() {
 
             int tableCount = _rng.Next(10) switch {
-
                 < 5 => 1,
                 < 8 => 2,
                 _ => 3,
@@ -65,8 +64,18 @@ namespace SqlToLinq.Tests {
             bool hasJoin = tableCount > 1;
             bool distinct = !hasJoin && _rng.Next(4) == 0;
             bool hasGroupBy = !hasJoin && !distinct && _rng.Next(3) == 0;
+            bool asFromSubquery = !hasJoin && !distinct && !hasGroupBy && _rng.Next(8) == 0;
+
+            if (asFromSubquery) return RandomFromSubquerySelect();
 
             string columns = BuildColumnList(distinct, hasGroupBy);
+
+            bool addScalarSubquery = !hasJoin && !hasGroupBy && !distinct
+                                     && columns != "*" && _rng.Next(5) == 0;
+
+            if (addScalarSubquery) {
+                columns += ", " + RandomScalarSubqueryColumn();
+            }
 
             var sql = new StringBuilder("SELECT ");
 
@@ -77,7 +86,6 @@ namespace SqlToLinq.Tests {
 
             if (hasJoin) {
                 for (int i = 1; i < _activeTables.Length; i++) {
-
                     string joinType = Pick(JoinTypes);
                     sql.Append($" {joinType} {_activeTables[i].JoinClause}");
                 }
@@ -88,10 +96,8 @@ namespace SqlToLinq.Tests {
             }
 
             if (hasGroupBy) {
-
                 string groupCol = Pick(UnqualifiedColumns());
                 sql.Append($" GROUP BY {groupCol}");
-
                 if (_rng.Next(2) == 0) {
                     sql.Append($" HAVING COUNT(*) {Pick(NumericOps)} {_rng.Next(1, 6)}");
                 }
@@ -102,12 +108,10 @@ namespace SqlToLinq.Tests {
                 string orderCol = hasJoin ? Pick(AllColumns()) : Pick(UnqualifiedColumns());
 
                 if (distinct && columns != "*") {
-
                     var selectCols = columns.Split(',')
                         .Select(c => c.Trim().Split(' ')[0])
                         .Where(c => !c.StartsWith("CASE"))
                         .ToArray();
-
                     if (selectCols.Length > 0) orderCol = Pick(selectCols);
                 }
 
@@ -116,13 +120,66 @@ namespace SqlToLinq.Tests {
 
             if (_rng.Next(3) == 0) {
                 sql.Append($" LIMIT {_rng.Next(1, 5)}");
-
                 if (_rng.Next(2) == 0) {
                     sql.Append($" OFFSET {_rng.Next(0, 3)}");
                 }
             }
 
             return sql.ToString() + ";";
+        }
+
+        private string RandomScalarSubqueryColumn() {
+
+            string alias = $"Sub{_rng.Next(1, 4)}";
+            string[] aggregates = { "COUNT(*)", "MAX(Age)", "MIN(Age)", "MAX(Points)", "MIN(Points)" };
+            string agg = Pick(aggregates);
+
+            return $"(SELECT {agg} FROM Users) AS {alias}";
+        }
+
+        private string RandomFromSubquerySelect() {
+
+            string innerCol1 = Pick(new[] { "Name", "Age", "Role", "Points", "Bonus" });
+            string innerCol2 = Pick(new[] { "Age", "Points", "Id" });
+            string innerCols = $"{innerCol1}, {innerCol2}";
+
+            var inner = new StringBuilder($"SELECT {innerCols} FROM Users u");
+
+            if (_rng.Next(2) == 0) {
+                inner.Append($" WHERE {RandomCompareCondition()}");
+            }
+
+            if (_rng.Next(2) == 0) {
+                string orderCol = _rng.Next(2) == 0 ? innerCol1 : innerCol2;
+                inner.Append($" ORDER BY {orderCol} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}");
+            }
+
+            if (_rng.Next(3) == 0) {
+                inner.Append($" LIMIT {_rng.Next(1, 5)}");
+            }
+
+            string outerCol = _rng.Next(2) == 0 ? innerCol1 : innerCol2;
+            var outer = new StringBuilder($"SELECT {outerCol} FROM ({inner}) AS sub");
+
+            if (_rng.Next(2) == 0) {
+
+                string filterCol = _rng.Next(2) == 0 ? innerCol1 : innerCol2;
+                bool isString = filterCol == "Name" || filterCol == "Role";
+                string filterExpr = isString
+                    ? $"{filterCol} {Pick(StringOps)} '{Pick(StringValues)}'"
+                    : $"{filterCol} {Pick(NumericOps)} {Pick(NumericValues)}";
+                outer.Append($" WHERE {filterExpr}");
+            }
+
+            if (_rng.Next(2) == 0) {
+                outer.Append($" ORDER BY {outerCol} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}");
+            }
+
+            if (_rng.Next(3) == 0) {
+                outer.Append($" LIMIT {_rng.Next(1, 5)}");
+            }
+
+            return outer.ToString() + ";";
         }
 
         private string[] StringColumns() {
@@ -184,14 +241,51 @@ namespace SqlToLinq.Tests {
 
         private string RandomSimpleCondition() {
 
-            int kind = _rng.Next(10);
+            bool canSubquery = _activeTables.Length == 1;
+
+            int bound = canSubquery ? 13 : 10;
+            int kind = _rng.Next(bound);
 
             if (kind < 4) return RandomCompareCondition();
             if (kind < 6) return RandomLikeCondition();
             if (kind < 8) return RandomBetweenCondition();
             if (kind < 9) return RandomInCondition();
+            if (kind < 10) return RandomIsNullCondition();
+            if (kind < 11) return RandomInSubqueryCondition();
+            if (kind < 12) return RandomExistsCondition(correlated: false);
+            return RandomExistsCondition(correlated: true);
+        }
 
-            return RandomIsNullCondition();
+        private string RandomInSubqueryCondition() {
+
+            string not = _rng.Next(3) == 0 ? "NOT " : "";
+            string alias = "s";
+            string innerWhere = _rng.Next(2) == 0
+                ? $" WHERE {alias}.Qty {Pick(NumericOps)} {_rng.Next(1, 3)}"
+                : "";
+
+            return $"Id {not}IN (SELECT {alias}.Owner FROM Orders {alias}{innerWhere})";
+        }
+
+        private string RandomExistsCondition(bool correlated) {
+
+            string not = _rng.Next(3) == 0 ? "NOT " : "";
+            string alias = "s";
+
+            string innerWhere;
+
+            if (correlated) {
+
+                string outerAlias = _activeTables[0].Alias;  
+                string extra = _rng.Next(2) == 0
+                    ? $" AND {alias}.Qty {Pick(NumericOps)} {_rng.Next(1, 3)}"
+                    : "";
+                innerWhere = $"WHERE {alias}.Owner = {outerAlias}.Id{extra}";
+            } else {
+                innerWhere = $"WHERE {alias}.Owner {Pick(NumericOps)} {_rng.Next(1, 7)}";
+            }
+
+            return $"{not}EXISTS (SELECT 1 FROM Orders {alias} {innerWhere})";
         }
 
         private string RandomCompareCondition() {
