@@ -279,6 +279,21 @@ namespace SqlToLinq.Core {
         }
     }
 
+    // UNION / UNION ALL / INTERSECT / EXCEPT
+
+    public class LinqSetOperationNode : LinqNode {
+
+        public LinqNode Left { get; set; }
+        public LinqNode Right { get; set; }
+
+        // "Union", "Concat" (UNION ALL), "Intersect", "Except"
+        public string MethodName { get; set; }
+
+        public override string ToCodeString() {
+            return $"{Left.ToCodeString()}.{MethodName}({Right.ToCodeString()})";
+        }
+    }
+
     // Common shape for all join node types
 
     public abstract class LinqJoinBaseNode : LinqNode {

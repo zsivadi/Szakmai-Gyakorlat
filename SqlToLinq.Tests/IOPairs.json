@@ -864,15 +864,99 @@
 		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Count() > 1).OrderByDescending(g => g.FirstOrDefault().Total).Select(g => new { Role = g.Key, Total = g.Count() }).ToList()"
 	},
 	{
-	"Id": 145,
-	"Desc": "|| operátorral string összefűzés.",
-	"SqlInput": "SELECT Name || Role AS FullLabel FROM Users",
-	"ExpectedLinq": "db.Users.Select(x => new { FullLabel = string.Concat(x.Name, x.Role) }).ToList()"
+		"Id": 145,
+		"Desc": "|| operátorral string összefűzés.",
+		"SqlInput": "SELECT Name || Role AS FullLabel FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { FullLabel = string.Concat(x.Name, x.Role) }).ToList()"
 	},
 	{
-	"Id": 146,
-	"Desc": "CONCAT WHERE-ben.",
-	"SqlInput": "SELECT Name FROM Users WHERE Name || Role = 'BobAdmin'",
-	"ExpectedLinq": "db.Users.Where(x => string.Concat(x.Name, x.Role) == \"BobAdmin\").Select(x => new { x.Name }).ToList()"
+		"Id": 146,
+		"Desc": "CONCAT WHERE-ben.",
+		"SqlInput": "SELECT Name FROM Users WHERE Name || Role = 'BobAdmin'",
+		"ExpectedLinq": "db.Users.Where(x => string.Concat(x.Name, x.Role) == \"BobAdmin\").Select(x => new { x.Name }).ToList()"
+	},
+	{
+		"Id": 147,
+		"Desc": "UNION két SELECT között.",
+		"SqlInput": "SELECT Name FROM Users WHERE Age > 25 UNION SELECT Name FROM Users WHERE Role = 'Admin'",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 25).Select(x => new { Name = x.Name }).Union(db.Users.Where(x => x.Role == \"Admin\").Select(x => new { Name = x.Name })).ToList()"
+	},
+	{
+		"Id": 148,
+		"Desc": "UNION ALL két SELECT között.",
+		"SqlInput": "SELECT Name FROM Users WHERE Age > 25 UNION ALL SELECT Name FROM Users WHERE Role = 'Admin'",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 25).Select(x => new { Name = x.Name }).Concat(db.Users.Where(x => x.Role == \"Admin\").Select(x => new { Name = x.Name })).ToList()"
+	},
+	{
+		"Id": 149,
+		"Desc": "UNION három SELECT-tel láncolva.",
+		"SqlInput": "SELECT Name FROM Users WHERE Age > 30 UNION SELECT Name FROM Users WHERE Role = 'Admin' UNION SELECT Name FROM Users WHERE Points > 100",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 30).Select(x => new { Name = x.Name }).Union(db.Users.Where(x => x.Role == \"Admin\").Select(x => new { Name = x.Name })).Union(db.Users.Where(x => x.Points > 100).Select(x => new { Name = x.Name })).ToList()"
+	},
+	{
+		"Id": 150,
+		"Desc": "UNION ALL több oszloppal.",
+		"SqlInput": "SELECT Name, Age FROM Users WHERE Role = 'Admin' UNION ALL SELECT Name, Age FROM Users WHERE Points > 100",
+		"ExpectedLinq": "db.Users.Where(x => x.Role == \"Admin\").Select(x => new { Name = x.Name, Age = x.Age }).Concat(db.Users.Where(x => x.Points > 100).Select(x => new { Name = x.Name, Age = x.Age })).ToList()"
+	},
+	{
+		"Id": 151,
+		"Desc": "|| három operandussal láncolva.",
+		"SqlInput": "SELECT Name || ' ' || Role AS FullLabel FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { FullLabel = string.Concat(string.Concat(x.Name, \" \"), x.Role) }).ToList()"
+	},
+	{
+		"Id": 152,
+		"Desc": "POWER függvény.",
+		"SqlInput": "SELECT Name, POWER(Points, 2) AS Squared FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Name = x.Name, Squared = Math.Pow((double)(x.Points), (double)(2)) }).ToList()"
+	},
+	{
+		"Id": 153,
+		"Desc": "SIGN függvény.",
+		"SqlInput": "SELECT Name, SIGN(Bonus) AS BonusSign FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Name = x.Name, BonusSign = Math.Sign((int)(x.Bonus)) }).ToList()"
+	},
+	{
+		"Id": 154,
+		"Desc": "GROUP BY HAVING AVG BETWEEN.",
+		"SqlInput": "SELECT Role, AVG(Age) AS AvgAge FROM Users GROUP BY Role HAVING AVG(Age) BETWEEN 20 AND 40",
+		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Average(x => x.Age) >= 20 && g.Average(x => x.Age) <= 40).Select(g => new { Role = g.Key, AvgAge = g.Average(x => x.Age) }).ToList()"
+	},
+	{
+		"Id": 155,
+		"Desc": "GROUP BY több kulccsal és SUM.",
+		"SqlInput": "SELECT Role, Age, SUM(Points) AS TotalPoints FROM Users GROUP BY Role, Age",
+		"ExpectedLinq": "db.Users.GroupBy(x => new { x.Role, x.Age }).Select(g => new { Role = g.Key.Role, Age = g.Key.Age, TotalPoints = g.Sum(x => x.Points) }).ToList()"
+	},
+	{
+		"Id": 156,
+		"Desc": "CASE WHEN WHERE feltételben.",
+		"SqlInput": "SELECT Name FROM Users WHERE CASE WHEN Age > 30 THEN 1 ELSE 0 END = 1",
+		"ExpectedLinq": "db.Users.Where(x => (x.Age > 30 ? 1 : 0) == 1).Select(x => new { Name = x.Name }).ToList()"
+	},
+	{
+		"Id": 157,
+		"Desc": "Beágyazott CASE WHEN.",
+		"SqlInput": "SELECT Name, CASE WHEN Age > 40 THEN 'Senior' WHEN Age > 25 THEN 'Mid' ELSE 'Junior' END AS Level FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Name = x.Name, Level = (x.Age > 40 ? \"Senior\" : (x.Age > 25 ? \"Mid\" : \"Junior\")) }).ToList()"
+	},
+	{
+		"Id": 158,
+		"Desc": "SELECT DISTINCT több oszloppal és WHERE.",
+		"SqlInput": "SELECT DISTINCT Role, Age FROM Users WHERE Points > 50",
+		"ExpectedLinq": "db.Users.Where(x => x.Points > 50).Select(x => new { x.Role, x.Age }).Distinct().ToList()"
+	},
+	{
+		"Id": 159,
+		"Desc": "UPPER és LOWER kombinálva.",
+		"SqlInput": "SELECT UPPER(Name) AS UpperName, LOWER(Role) AS LowerRole FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { UpperName = x.Name.ToUpper(), LowerRole = x.Role.ToLower() }).ToList()"
+	},
+	{
+		"Id": 160,
+		"Desc": "TRIM és LENGTH kombinálva WHERE-ben.",
+		"SqlInput": "SELECT Name FROM Users WHERE LENGTH(TRIM(Name)) > 3",
+		"ExpectedLinq": "db.Users.Where(x => x.Name.Trim().Length > 3).Select(x => new { Name = x.Name }).ToList()"
 	}
 ]

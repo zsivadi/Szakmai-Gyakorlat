@@ -18,22 +18,51 @@ namespace SqlToLinq.Core {
         // Active only while resolving a single join step's ON-condition and flatten expressions.
         // Maps each alias visible at that point to the C# expression prefix needed to reach its
         // entity from within that step's outer/inner lambda scope (see the JOIN loop below).
-
         private Dictionary<string, string> _joinKeyAliasMap = null;
 
         private Dictionary<string, string> _selectAliases = new Dictionary<string, string>();
         private Dictionary<string, string> _tableAliases = new Dictionary<string, string>();
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
-            return Visit(context.statement());
+            return Visit(context.selectQuery());
+        }
+
+        public override LinqNode VisitSelectQuery([NotNull] SqlParserParser.SelectQueryContext context) {
+
+            var selects = context.selectStmt();
+
+            if (selects.Length == 1) {
+                return Visit(selects[0]);
+            }
+
+            var result = Visit(selects[0]);
+
+            for (int i = 1; i < selects.Length; i++) {
+
+                var right = Visit(selects[i]);
+
+                bool isAll = context.ALL(i - 1) != null;
+                bool isIntersect = context.INTERSECT(i - 1) != null;
+                bool isExcept = context.EXCEPT(i - 1) != null;
+
+                string methodName = isIntersect ? "Intersect"
+                                  : isExcept ? "Except"
+                                  : isAll ? "Concat"   
+                                  : "Union";   
+
+                result = new LinqSetOperationNode {
+                    Left = result,
+                    Right = right,
+                    MethodName = methodName
+                };
+            }
+
+            return result;
         }
 
         public override LinqNode VisitStatement([NotNull] SqlParserParser.StatementContext context) {
 
             if (context.selectStmt() != null) return Visit(context.selectStmt());
-            //if (context.updateStmt() != null) return Visit(context.updateStmt());
-            //if (context.insertStmt() != null) return Visit(context.insertStmt());
-            //if (context.deleteStmt() != null) return Visit(context.deleteStmt());
 
             throw new NotSupportedException("[ERROR] Unknown or unsupported command!");
         }
@@ -91,8 +120,8 @@ namespace SqlToLinq.Core {
             foreach (var item in columnList.selectItem()) {
                 if (item.IDENTIFIER() != null) {
                     string alias = ToPascalCase(item.IDENTIFIER().GetText());
-
                     if (item.expr() is SqlParserParser.ColumnExprContext colCtx) {
+
                         string original = ToPascalCase(colCtx.GetText());
                         aliases[alias] = original;
                     } else {
@@ -971,6 +1000,7 @@ namespace SqlToLinq.Core {
             string rawColumnName = ToPascalCase(context.GetText());
 
             if (_inOrderBy && _selectAliases.ContainsKey(rawColumnName)) {
+
                 string resolved = _selectAliases[rawColumnName];
 
                 if (resolved == rawColumnName) {

@@ -1,6 +1,8 @@
 grammar SqlParser;
 
-query : statement SEMICOLON? EOF ;
+query : selectQuery SEMICOLON? EOF ;
+
+selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
 
 statement : selectStmt 
           | updateStmt 
@@ -76,19 +78,19 @@ condition : '(' condition ')'                                       # parensCond
 
 exprList : expr (COMMA expr)* ;
 
-expr : left=expr op=mathOp right=expr                          # mathExpr
+expr : left=expr op=mathOp right=expr                           # mathExpr
      | left=expr CONCAT right=expr                              # concatExpr
-     | IDENTIFIER '(' DISTINCT expr ')'                        # distinctAggregateExpr
-     | IDENTIFIER '(' (STAR | expr) ')'                        # aggregateExpr
-     | IDENTIFIER '(' expr COMMA expr ')'                      # stringFunc2Expr
-     | IDENTIFIER '(' expr COMMA expr COMMA expr ')'           # stringFunc3Expr
+     | IDENTIFIER '(' DISTINCT expr ')'                         # distinctAggregateExpr
+     | IDENTIFIER '(' (STAR | expr) ')'                         # aggregateExpr
+     | IDENTIFIER '(' expr COMMA expr ')'                       # stringFunc2Expr
+     | IDENTIFIER '(' expr COMMA expr COMMA expr ')'            # stringFunc3Expr
      | caseExpr                                                 # caseExprAlt
-     | '(' expr ')'                                            # parenExpr
-     | IDENTIFIER DOT IDENTIFIER                               # qualifiedColumnExpr
-     | IDENTIFIER                                              # columnExpr
-     | NUMBER                                                    # numberExpr
-     | FLOAT                                                     # floatExpr
-     | STRING_LITERAL                                            # stringExpr
+     | '(' expr ')'                                             # parenExpr
+     | IDENTIFIER DOT IDENTIFIER                                # qualifiedColumnExpr
+     | IDENTIFIER                                               # columnExpr
+     | NUMBER                                                   # numberExpr
+     | FLOAT                                                    # floatExpr
+     | STRING_LITERAL                                           # stringExpr
      ;
 
 caseExpr : CASE caseOperand=expr? (WHEN condition THEN expr)+ (ELSE elseExpr=expr)? END ;
@@ -137,6 +139,10 @@ ELSE		: [Ee][Ll][Ss][Ee] ;
 END			: [Ee][Nn][Dd] ;
 LIMIT 		: [Ll][Ii][Mm][Ii][Tt] ;
 OFFSET		: [Oo][Ff][Ff][Ss][Ee][Tt] ;
+UNION		: [Uu][Nn][Ii][Oo][Nn] ;
+ALL			: [Aa][Ll][Ll] ;
+INTERSECT	: [Ii][Nn][Tt][Ee][Rr][Ss][Ee][Cc][Tt] ;
+EXCEPT		: [Ee][Xx][Cc][Ee][Pp][Tt] ;
 IN      	: [Ii][Nn] ;
 IS      	: [Ii][Ss] ;
 NULL_TOKEN 	: [Nn][Uu][Ll][Ll] ;
