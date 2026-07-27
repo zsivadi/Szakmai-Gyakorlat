@@ -258,7 +258,7 @@ namespace SqlToLinq.Core {
             string arg2 = Arguments.Count > 2 ? Arguments[2].ToCodeString() : "";
 
             return FunctionName.ToUpperInvariant() switch {
-                
+
                 "UPPER" => $"{arg0}.ToUpper()",
                 "LOWER" => $"{arg0}.ToLower()",
                 "TRIM" => $"{arg0}.Trim()",
@@ -293,14 +293,14 @@ namespace SqlToLinq.Core {
                 "SIGN" => $"Math.Sign((int)({arg0}))",
                 "MOD" => $"({arg0}) % ({arg1})",
 
-                "YEAR" => $"({arg0}).Year",
-                "MONTH" => $"({arg0}).Month",
-                "DAY" => $"({arg0}).Day",
-                "HOUR" => $"({arg0}).Hour",
-                "MINUTE" => $"({arg0}).Minute",
-                "SECOND" => $"({arg0}).Second",
+                "YEAR" => $"({arg0}).Value.Year",
+                "MONTH" => $"({arg0}).Value.Month",
+                "DAY" => $"({arg0}).Value.Day",
+                "HOUR" => $"({arg0}).Value.Hour",
+                "MINUTE" => $"({arg0}).Value.Minute",
+                "SECOND" => $"({arg0}).Value.Second",
 
-                "FORMAT" => $"({arg0}).ToString({arg1})",
+                "FORMAT" => $"({arg0})!.ToString({arg1})",
                 "CONVERT" => $"System.Convert.ToDateTime({arg1})",
 
                 "DATEADD" => GenerateDateAdd(arg0, arg1, arg2),
@@ -320,46 +320,51 @@ namespace SqlToLinq.Core {
         private static string GenerateDateAdd(string part, string n, string date) {
 
             string p = part.Trim('"').Trim('\'').ToUpperInvariant()
-                           .Replace("X.", "").Replace("_", "");  
+                           .Replace("X.", "").Replace("_", "");
             return p switch {
-
-                "YEAR" => $"({date}).AddYears((int)({n}))",
-                "MONTH" => $"({date}).AddMonths((int)({n}))",
-                "DAY" => $"({date}).AddDays((int)({n}))",
-                "HOUR" => $"({date}).AddHours((int)({n}))",
-                "MINUTE" => $"({date}).AddMinutes((int)({n}))",
-                "SECOND" => $"({date}).AddSeconds((int)({n}))",
+                "YEAR" => $"({date}).Value.AddYears({n})",
+                "MONTH" => $"({date}).Value.AddMonths({n})",
+                "DAY" => $"({date}).Value.AddDays({n})",
+                "HOUR" => $"({date}).Value.AddHours({n})",
+                "MINUTE" => $"({date}).Value.AddMinutes({n})",
+                "SECOND" => $"({date}).Value.AddSeconds({n})",
                 _ => throw new System.NotSupportedException($"[ERROR] DATEADD: unsupported part '{part}'.")
             };
         }
 
         private static string GenerateDateDiff(string part, string start, string end) {
+
             string p = part.Trim('"').Trim('\'').ToUpperInvariant()
                            .Replace("X.", "").Replace("_", "");
-            return p switch {
 
-                "YEAR" => $"(({end}).Year - ({start}).Year)",
-                "MONTH" => $"((({end}).Year - ({start}).Year) * 12 + ({end}).Month - ({start}).Month)",
-                "DAY" => $"(int)(({end}) - ({start})).TotalDays",
-                "HOUR" => $"(int)(({end}) - ({start})).TotalHours",
-                "MINUTE" => $"(int)(({end}) - ({start})).TotalMinutes",
-                "SECOND" => $"(int)(({end}) - ({start})).TotalSeconds",
+            string s = IsDateTimeConstant(start) ? start : $"({start}).Value";
+            string e = IsDateTimeConstant(end) ? $"({end})" : $"({end}).Value";
+
+            return p switch {
+                "YEAR" => $"({e}.Year - {s}.Year)",
+                "MONTH" => $"(({e}.Year - {s}.Year) * 12 + {e}.Month - {s}.Month)",
+                "DAY" => $"(int)({e} - {s}).TotalDays",
+                "HOUR" => $"(int)({e} - {s}).TotalHours",
+                "MINUTE" => $"(int)({e} - {s}).TotalMinutes",
+                "SECOND" => $"(int)({e} - {s}).TotalSeconds",
                 _ => throw new System.NotSupportedException($"[ERROR] DATEDIFF: unsupported part '{part}'.")
             };
         }
+
+        private static bool IsDateTimeConstant(string expr) =>
+    expr == "DateTime.Now" || expr == "DateTime.Today" || expr == "DateTime.UtcNow";
 
         private static string GenerateDatePart(string part, string date) {
 
             string p = part.Trim('"').Trim('\'').ToUpperInvariant()
                            .Replace("X.", "").Replace("_", "");
             return p switch {
-
-                "YEAR" => $"({date}).Year",
-                "MONTH" => $"({date}).Month",
-                "DAY" => $"({date}).Day",
-                "HOUR" => $"({date}).Hour",
-                "MINUTE" => $"({date}).Minute",
-                "SECOND" => $"({date}).Second",
+                "YEAR" => $"({date}).Value.Year",
+                "MONTH" => $"({date}).Value.Month",
+                "DAY" => $"({date}).Value.Day",
+                "HOUR" => $"({date}).Value.Hour",
+                "MINUTE" => $"({date}).Value.Minute",
+                "SECOND" => $"({date}).Value.Second",
                 _ => throw new System.NotSupportedException($"[ERROR] DATEPART: unsupported part '{part}'.")
             };
         }
@@ -374,17 +379,17 @@ namespace SqlToLinq.Core {
         public override string ToCodeString() => Kind == "Date" ? "DateTime.Today" : "DateTime.Now";
     }
 
-    public class LinqRegexMatchNode : LinqNode {
+    // LIKE / NOT LIKE
+
+    public class LinqLikeNode : LinqNode {
 
         public LinqNode Target { get; set; }
 
         public string Pattern { get; set; }
 
         public override string ToCodeString() {
-
-            string escapedPattern = Pattern?.Replace("\\", "\\\\") ?? "";
-
-            return $"System.Text.RegularExpressions.Regex.IsMatch({Target.ToCodeString()}, \"(?i){escapedPattern}\")";
+            string escapedPattern = Pattern?.Replace("\\", "\\\\").Replace("\"", "\\\"") ?? "";
+            return $"EF.Functions.Like({Target.ToCodeString()}, \"{escapedPattern}\")";
         }
     }
 

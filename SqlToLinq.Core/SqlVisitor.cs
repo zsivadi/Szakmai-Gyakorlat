@@ -965,31 +965,17 @@ namespace SqlToLinq.Core {
             var leftNode = Visit(context.left);
 
             string pattern = context.right.Text.Trim('\'');
-            pattern = Regex.Replace(pattern, "%+", "%");
 
-            var sb = new StringBuilder("^");
-
-            foreach (char c in pattern) {
-                if (c == '%') {
-                    sb.Append(".*");
-                } else if (c == '_') {
-                    sb.Append(".");
-                } else {
-                    sb.Append(Regex.Escape(c.ToString()));
-                }
-            }
-            sb.Append("$");
-
-            LinqNode regexNode = new LinqRegexMatchNode {
+            LinqNode likeNode = new LinqLikeNode {
                 Target = leftNode,
-                Pattern = sb.ToString()
+                Pattern = pattern
             };
 
             if (context.NOT() != null) {
-                return new LinqUnaryExpressionNode { Operator = "!", Operand = regexNode };
+                return new LinqUnaryExpressionNode { Operator = "!", Operand = likeNode };
             }
 
-            return regexNode;
+            return likeNode;
         }
 
         // BETWEEN condition processing, converting to two chained comparisons joined with "&&"
