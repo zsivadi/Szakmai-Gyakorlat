@@ -110,7 +110,7 @@ namespace SqlToLinq.Tests {
                 if (distinct && columns != "*") {
                     var selectCols = columns.Split(',')
                         .Select(c => c.Trim().Split(' ')[0])
-                        .Where(c => !c.StartsWith("CASE"))
+                        .Where(c => !c.StartsWith("CASE") && !c.Contains("(") && !c.Contains(")"))
                         .ToArray();
                     if (selectCols.Length > 0) orderCol = Pick(selectCols);
                 }
@@ -140,7 +140,9 @@ namespace SqlToLinq.Tests {
         private string RandomFromSubquerySelect() {
 
             string innerCol1 = Pick(new[] { "Name", "Age", "Role", "Points", "Bonus" });
-            string innerCol2 = Pick(new[] { "Age", "Points", "Id" });
+            string[] col2Options = new[] { "Age", "Points", "Id" }.Where(c => c != innerCol1).ToArray();
+
+            string innerCol2 = Pick(col2Options);
             string innerCols = $"{innerCol1}, {innerCol2}";
 
             var inner = new StringBuilder($"SELECT {innerCols} FROM Users u");

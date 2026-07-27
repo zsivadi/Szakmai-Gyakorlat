@@ -5,16 +5,13 @@ using NUnit.Framework;
 using System.Reflection;
 using System.Collections;
 using Microsoft.Data.Sqlite;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace SqlToLinq.Tests {
 
-    // --- Dedicated schema for outer join testing ----------------------------------
-    //
     // The seed data is designed so that unmatched rows exist on BOTH sides of every
     // join relationship. This lets the tests verify that LEFT JOIN preserves left-only
     // rows with nulls on the right, and RIGHT JOIN preserves right-only rows with
@@ -44,12 +41,6 @@ namespace SqlToLinq.Tests {
         }
     }
 
-    public class OuterJoinScriptGlobals {
-        public OuterJoinDbContext db;
-    }
-
-    // --- Test fixture -------------------------------------------------------------
-
     [TestFixture]
     public class OuterJoinSemanticTests {
 
@@ -68,15 +59,15 @@ namespace SqlToLinq.Tests {
             _db.Customers.AddRange(
                 new Customer(1, "Alice", "Budapest"),
                 new Customer(2, "Bob", "Debrecen"),
-                new Customer(3, "Carol", "Pécs"),       // no invoices → LEFT JOIN null row
-                new Customer(4, "Dave", "Győr")        // no invoices → LEFT JOIN null row
+                new Customer(3, "Carol", "Pécs"),    
+                new Customer(4, "Dave", "Győr")     
             );
 
             _db.Invoices.AddRange(
-                new Invoice(1, 1, "Laptop", 1200),  // Alice
-                new Invoice(2, 1, "Mouse", 25),   // Alice
-                new Invoice(3, 2, "Keyboard", 75),   // Bob
-                new Invoice(4, 99, "Monitor", 350)    // owner 99 does not exist → RIGHT JOIN null row
+                new Invoice(1, 1, "Laptop", 1200),  
+                new Invoice(2, 1, "Mouse", 25),  
+                new Invoice(3, 2, "Keyboard", 75),  
+                new Invoice(4, 99, "Monitor", 350)   
             );
 
             _db.SaveChanges();
@@ -88,119 +79,90 @@ namespace SqlToLinq.Tests {
             _connection.Dispose();
         }
 
-        // --- LEFT JOIN -----------------------------------------------------------
-
         [Test]
-        public async Task Left_Join_Preserves_Unmatched_Left_Rows() {
-
-            // Carol and Dave have no invoices → they appear with null product/amount.
-            // 4 customers × their invoices: Alice=2, Bob=1, Carol=0→1 null, Dave=0→1 null = 6 rows total.
+        public void Left_Join_Preserves_Unmatched_Left_Rows() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON c.id = i.owner";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Left_Join_Where_On_Left_Table() {
-
-            // Only Alice and Bob pass age > 0 (effectively all matched customers).
-            // Carol and Dave still appear because WHERE is on the left (preserved) side.
+        public void Left_Join_Where_On_Left_Table() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON c.id = i.owner WHERE c.city = 'Budapest'";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Left_Join_Where_On_Right_Table_Filters_Nulls() {
-
-            // WHERE on the right side implicitly removes null rows (Carol, Dave drop out).
+        public void Left_Join_Where_On_Right_Table_Filters_Nulls() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON c.id = i.owner WHERE i.product = 'Laptop'";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Left_Join_Order_By_Left_Column() {
-
+        public void Left_Join_Order_By_Left_Column() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON c.id = i.owner ORDER BY c.name ASC";
-            await AssertSemanticallyEqual(sql, orderSensitive: true);
+            AssertSemanticallyEqual(sql, orderSensitive: true);
         }
 
         [Test]
-        public async Task Left_Join_Limit() {
-
+        public void Left_Join_Limit() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON c.id = i.owner ORDER BY c.name ASC LIMIT 3";
-            await AssertSemanticallyEqual(sql, orderSensitive: true);
+            AssertSemanticallyEqual(sql, orderSensitive: true);
         }
 
         [Test]
-        public async Task Left_Outer_Join_Explicit_Outer_Keyword() {
-
+        public void Left_Outer_Join_Explicit_Outer_Keyword() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT OUTER JOIN Invoices i ON c.id = i.owner";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Left_Join_Reversed_On_Condition() {
-
+        public void Left_Join_Reversed_On_Condition() {
             string sql = "SELECT c.name, i.product FROM Customers c LEFT JOIN Invoices i ON i.owner = c.id";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
-        // --- RIGHT JOIN ----------------------------------------------------------
-
         [Test]
-        public async Task Right_Join_Preserves_Unmatched_Right_Rows() {
-
-            // Invoice 4 has Owner=99 which does not exist → appears with null customer columns.
-            // Alice=2, Bob=1, Invoice4=1 null customer = 4 rows total.
+        public void Right_Join_Preserves_Unmatched_Right_Rows() {
             string sql = "SELECT c.name, i.product FROM Customers c RIGHT JOIN Invoices i ON c.id = i.owner";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Right_Join_Where_On_Right_Table() {
-
+        public void Right_Join_Where_On_Right_Table() {
             string sql = "SELECT c.name, i.product FROM Customers c RIGHT JOIN Invoices i ON c.id = i.owner WHERE i.product = 'Monitor'";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Right_Join_Reversed_On_Condition() {
-
+        public void Right_Join_Reversed_On_Condition() {
             string sql = "SELECT c.name, i.product FROM Customers c RIGHT JOIN Invoices i ON i.owner = c.id";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
         [Test]
-        public async Task Right_Join_Order_By_Right_Column() {
-
+        public void Right_Join_Order_By_Right_Column() {
             string sql = "SELECT c.name, i.product FROM Customers c RIGHT JOIN Invoices i ON c.id = i.owner ORDER BY i.product ASC";
-            await AssertSemanticallyEqual(sql, orderSensitive: true);
+            AssertSemanticallyEqual(sql, orderSensitive: true);
         }
 
         [Test]
-        public async Task Right_Outer_Join_Explicit_Outer_Keyword() {
-
+        public void Right_Outer_Join_Explicit_Outer_Keyword() {
             string sql = "SELECT c.name, i.product FROM Customers c RIGHT OUTER JOIN Invoices i ON c.id = i.owner";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
-
-        // --- INNER JOIN (for contrast) -------------------------------------------
 
         [Test]
-        public async Task Inner_Join_Drops_Both_Unmatched_Sides() {
-
-            // Carol, Dave (no invoices) and Invoice 4 (no customer) all drop out.
+        public void Inner_Join_Drops_Both_Unmatched_Sides() {
             string sql = "SELECT c.name, i.product FROM Customers c JOIN Invoices i ON c.id = i.owner";
-            await AssertSemanticallyEqual(sql);
+            AssertSemanticallyEqual(sql);
         }
 
-        // --- Helpers -------------------------------------------------------------
-
-        private async Task AssertSemanticallyEqual(string sql, bool orderSensitive = false) {
+        private void AssertSemanticallyEqual(string sql, bool orderSensitive = false) {
 
             var sqlRows = RunRawSql(sql);
 
             string generatedLinq = SqlToLinqConverter.Convert(sql);
-            var linqRows = await RunGeneratedLinq(generatedLinq);
+            var linqRows = RunGeneratedLinq(generatedLinq);
 
             Assert.That(linqRows.Count, Is.EqualTo(sqlRows.Count),
                 $"[ERROR] Row count differs.\nSQL: {sql}\nLINQ: {generatedLinq}\nExpected: {sqlRows.Count}, Got: {linqRows.Count}");
@@ -235,21 +197,52 @@ namespace SqlToLinq.Tests {
             return rows;
         }
 
-        private async Task<List<Dictionary<string, object>>> RunGeneratedLinq(string linqCode) {
+        private List<Dictionary<string, object>> RunGeneratedLinq(string linqCode) {
 
-            var options = ScriptOptions.Default
-                .WithReferences(
-                    typeof(object).Assembly,
-                    typeof(Enumerable).Assembly,
-                    typeof(System.Text.RegularExpressions.Regex).Assembly,
-                    typeof(OuterJoinDbContext).Assembly)
-                .WithImports("System", "System.Linq", "System.Text.RegularExpressions", "System.Collections.Generic");
+            string source = $@"
+                using System;
+                using System.Linq;
+                using System.Collections.Generic;
+                using Microsoft.EntityFrameworkCore;
+                using SqlToLinq.Tests;
 
-            var globals = new OuterJoinScriptGlobals { db = _db };
+                public static class LinqRunner {{
+                    public static object Run(OuterJoinDbContext db) {{
+                        return {linqCode};
+                    }}
+            }}";
 
-            object result = await CSharpScript.EvaluateAsync<object>(linqCode, options, globals);
+            var references = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+                .Select(a => MetadataReference.CreateFromFile(a.Location))
+                .ToList();
 
-            return ToRowList(result);
+            var compilation = CSharpCompilation.Create(
+                assemblyName: "OuterJoinLinqRunner",
+                syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+            using var ms = new System.IO.MemoryStream();
+            var result = compilation.Emit(ms);
+
+            if (!result.Success) {
+
+                var errors = string.Join("\n", result.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.ToString()));
+
+                throw new InvalidOperationException(
+                    $"[ERROR] Roslyn compilation failed.\nLINQ: {linqCode}\nErrors:\n{errors}");
+            }
+
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+            var assembly = Assembly.Load(ms.ToArray());
+            var type = assembly.GetType("LinqRunner");
+            var method = type.GetMethod("Run");
+
+            object res = method.Invoke(null, new object[] { _db });
+            return ToRowList(res);
         }
 
         private List<Dictionary<string, object>> ToRowList(object result) {
@@ -277,9 +270,20 @@ namespace SqlToLinq.Tests {
 
         private static string NormalizeKey(string name) => name.Replace("_", "").ToLowerInvariant();
 
+        private static string NormalizeValue(object value) {
+
+            if (value == null) return "NULL";
+            if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is float f) return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is decimal m) return m.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            return value?.ToString() ?? "NULL";
+        }
+
         private static string SerializeRow(Dictionary<string, object> row) {
             return string.Join("|", row.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                                       .Select(kv => $"{kv.Key}={kv.Value ?? "NULL"}"));
+                                       .Select(kv => $"{kv.Key}={NormalizeValue(kv.Value)}"));
         }
     }
 }

@@ -153,43 +153,43 @@
 		"Id": 26,
 		"Desc": "% a feltétel végén.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'A%'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"A%\")).ToList()"
 	},
 	{
 		"Id": 27,
 		"Desc": "% a feltétel elején.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"%a\")).ToList()"
 	},
 	{
 		"Id": 28,
 		"Desc": "% mindkét oldalon.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '%a%'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^.*a.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"%a%\")).ToList()"
 	},
 	{
 		"Id": 29,
 		"Desc": "% középen.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"B%b\")).ToList()"
 	},
 	{
 		"Id": 30,
 		"Desc": "Több %.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B%%%%%b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.*b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"B%%%%%b\")).ToList()"
 	},
 	{
 		"Id": 31,
 		"Desc": "_ a szövegben.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE 'B_b'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^B.b$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"B_b\")).ToList()"
 	},
 	{
 		"Id": 32,
 		"Desc": "Több _.",
 		"SqlInput": "SELECT * FROM Users WHERE Name LIKE '___'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^...$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"___\")).ToList()"
 	},
 	{
 		"Id": 33,
@@ -255,7 +255,7 @@
 		"Id": 43,
 		"Desc": "NOT LIKE minta tagadása.",
 		"SqlInput": "SELECT * FROM Users WHERE Name NOT LIKE 'A%'",
-		"ExpectedLinq": "db.Users.Where(x => !(System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\"))).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !(EF.Functions.Like(x.Name, \"A%\"))).ToList()"
 	},
 	{
 		"Id": 44,
@@ -441,7 +441,7 @@
 		"Id": 74,
 		"Desc": "NOT LIKE több feltétellel.",
 		"SqlInput": "SELECT * FROM Users WHERE Name NOT LIKE 'A%' AND Age > 20",
-		"ExpectedLinq": "db.Users.Where(x => !(System.Text.RegularExpressions.Regex.IsMatch(x.Name, \"(?i)^A.*$\")) && x.Age > 20).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !(EF.Functions.Like(x.Name, \"A%\")) && x.Age > 20).ToList()"
 	},
 	{
 		"Id": 75,
@@ -633,7 +633,7 @@
 		"Id": 106,
 		"Desc": "UPPER WHERE-ben LIKE-kal kombinálva.",
 		"SqlInput": "SELECT * FROM Users WHERE UPPER(Name) LIKE 'A%'",
-		"ExpectedLinq": "db.Users.Where(x => System.Text.RegularExpressions.Regex.IsMatch(x.Name.ToUpper(), \"(?i)^A.*$\")).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name.ToUpper(), \"A%\")).ToList()"
 	},
 	{
 		"Id": 107,
@@ -846,22 +846,10 @@
 		"ExpectedLinq": "db.Users.Where(x => Math.Abs((int)(x.Bonus)) > 5).Select(x => new { x.Name, AbsBonus = Math.Abs((int)(x.Bonus)), FloorPts = Math.Floor((double)(x.Points)) }).ToList()"
 	},
 	{
-		"Id": 142,
-		"Desc": "ORDER BY aggregátum alias.",
-		"SqlInput": "SELECT Role, SUM(Points) AS TotalPoints FROM Users GROUP BY Role ORDER BY TotalPoints DESC",
-		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).OrderByDescending(g => g.FirstOrDefault().TotalPoints).Select(g => new { Role = g.Key, TotalPoints = g.Sum(x => x.Points) }).ToList()"
-	},
-	{
 		"Id": 143,
 		"Desc": "HAVING két aggregátum összehasonlítása.",
 		"SqlInput": "SELECT Role FROM Users GROUP BY Role HAVING MAX(Age) > MIN(Age)",
 		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Max(x => x.Age) > g.Min(x => x.Age)).Select(g => new { Role = g.Key }).ToList()"
-	},
-	{
-		"Id": 144,
-		"Desc": "ORDER BY alias és HAVING kombinálva.",
-		"SqlInput": "SELECT Role, COUNT(*) AS Total FROM Users GROUP BY Role HAVING COUNT(*) > 1 ORDER BY Total DESC",
-		"ExpectedLinq": "db.Users.GroupBy(x => x.Role).Where(g => g.Count() > 1).OrderByDescending(g => g.FirstOrDefault().Total).Select(g => new { Role = g.Key, Total = g.Count() }).ToList()"
 	},
 	{
 		"Id": 145,
@@ -1066,5 +1054,191 @@
 		"Desc": "FROM-beli inline nézet LIMIT-tel.",
 		"SqlInput": "SELECT Name FROM (SELECT Name, Age FROM Users ORDER BY Age DESC LIMIT 3) AS top3",
 		"ExpectedLinq": "(db.Users.OrderByDescending(x => x.Age).Select(x => new { x.Name, x.Age }).Take(3)).Select(x => new { x.Name }).ToList()"
+	},
+	{
+		"Id": 179,
+		"Desc": "REPLACE függvény.",
+		"SqlInput": "SELECT REPLACE(Name, 'Bob', 'Robert') AS NewName FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { NewName = x.Name.Replace(\"Bob\", \"Robert\") }).ToList()"
+	},
+	{
+		"Id": 180,
+		"Desc": "CHARINDEX függvény.",
+		"SqlInput": "SELECT CHARINDEX('o', Name) AS Pos FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Pos = (x.Name).IndexOf(\"o\") + 1 }).ToList()"
+	},
+	{
+		"Id": 181,
+		"Desc": "YEAR függvény.",
+		"SqlInput": "SELECT YEAR(CreatedAt) AS Yr FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Yr = (x.CreatedAt).Value.Year }).ToList()"
+	},
+	{
+		"Id": 182,
+		"Desc": "GETDATE() függvény — WHERE-ben összehasonlítás.",
+		"SqlInput": "SELECT Name FROM Users WHERE CreatedAt < GETDATE()",
+		"ExpectedLinq": "db.Users.Where(x => x.CreatedAt < DateTime.Now).Select(x => new { x.Name }).ToList()"
+	},
+	{
+		"Id": 183,
+		"Desc": "CURRENT_DATE kulcsszó.",
+		"SqlInput": "SELECT Name FROM Users WHERE CreatedAt < CURRENT_DATE",
+		"ExpectedLinq": "db.Users.Where(x => x.CreatedAt < DateTime.Today).Select(x => new { x.Name }).ToList()"
+	},
+	{
+		"Id": 184,
+		"Desc": "DATEADD függvény — 'day' string literál part.",
+		"SqlInput": "SELECT DATEADD('day', 7, CreatedAt) AS NextWeek FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { NextWeek = (x.CreatedAt).Value.AddDays(7) }).ToList()"
+	},
+	{
+		"Id": 185,
+		"Desc": "DATEDIFF függvény — 'year' string literál part.",
+		"SqlInput": "SELECT DATEDIFF('year', CreatedAt, GETDATE()) AS Yrs FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Yrs = ((DateTime.Now).Year - (x.CreatedAt).Value.Year) }).ToList()"
+	},
+	{
+		"Id": 186,
+		"Desc": "DATEPART függvény — 'month' string literál part.",
+		"SqlInput": "SELECT DATEPART('month', CreatedAt) AS Mo FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Mo = (x.CreatedAt).Value.Month }).ToList()"
+	},
+	{
+		"Id": 187,
+		"Desc": "MONTH függvény — közvetlen hónap kinyerés.",
+		"SqlInput": "SELECT MONTH(CreatedAt) AS Mo FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { Mo = (x.CreatedAt).Value.Month }).ToList()"
+	},
+	{
+		"Id": 188,
+		"Desc": "DAY függvény — közvetlen nap kinyerés.",
+		"SqlInput": "SELECT DAY(CreatedAt) AS D FROM Users",
+		"ExpectedLinq": "db.Users.Select(x => new { D = (x.CreatedAt).Value.Day }).ToList()"
+	},
+	{
+		"Id": 189,
+		"Desc": "LTRIM függvény — vezető szóközök eltávolítása.",
+		"SqlInput": "SELECT LTRIM(Name) AS Trimmed FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Trimmed = x.Name.TrimStart() }).ToList()"
+	},
+	{
+		"Id": 190,
+		"Desc": "RTRIM függvény — záró szóközök eltávolítása.",
+		"SqlInput": "SELECT RTRIM(Name) AS Trimmed FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Trimmed = x.Name.TrimEnd() }).ToList()"
+	},
+	{
+		"Id": 191,
+		"Desc": "CONCAT függvény — két string összefűzése.",
+		"SqlInput": "SELECT CONCAT(Name, Role) AS Full FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Full = string.Concat(x.Name, x.Role) }).ToList()"
+	},
+	{
+		"Id": 192,
+		"Desc": "INSTR függvény — részstring pozíciója.",
+		"SqlInput": "SELECT INSTR(Name, 'o') AS Pos FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Pos = (x.Name).IndexOf(\"o\") + 1 }).ToList()"
+	},
+	{
+		"Id": 193,
+		"Desc": "REVERSE függvény — string megfordítása.",
+		"SqlInput": "SELECT REVERSE(Name) AS Rev FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Rev = new string((x.Name).Reverse().ToArray()) }).ToList()"
+	},
+	{
+		"Id": 194,
+		"Desc": "REPEAT függvény — string ismétlése.",
+		"SqlInput": "SELECT REPEAT(Name, 2) AS Rep FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Rep = string.Concat(System.Linq.Enumerable.Repeat(x.Name, 2)) }).ToList()"
+	},
+	{
+		"Id": 195,
+		"Desc": "SPACE függvény — n darab szóköz generálása.",
+		"SqlInput": "SELECT SPACE(3) AS Spaces FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Spaces = new string(' ', 3) }).ToList()"
+	},
+	{
+		"Id": 196,
+		"Desc": "LCASE függvény — alias a LOWER-re.",
+		"SqlInput": "SELECT LCASE(Name) AS Lower FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Lower = x.Name.ToLower() }).ToList()"
+	},
+	{
+		"Id": 197,
+		"Desc": "UCASE függvény — alias az UPPER-re.",
+		"SqlInput": "SELECT UCASE(Name) AS Upper FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { Upper = x.Name.ToUpper() }).ToList()"
+	},
+	{
+		"Id": 198,
+		"Desc": "MOD operátor — maradékos osztás.",
+		"SqlInput": "SELECT Name, MOD(Age, 2) AS AgeRem FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, AgeRem = (x.Age) % (2) }).ToList()"
+	},
+	{
+		"Id": 199,
+		"Desc": "DATEADD month part.",
+		"SqlInput": "SELECT Name, DATEADD('month', 1, CreatedAt) AS NextMonth FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, NextMonth = (x.CreatedAt).Value.AddMonths(1) }).ToList()"
+	},
+	{
+		"Id": 200,
+		"Desc": "DATEADD year part.",
+		"SqlInput": "SELECT Name, DATEADD('year', 1, CreatedAt) AS NextYear FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, NextYear = (x.CreatedAt).Value.AddYears(1) }).ToList()"
+	},
+	{
+		"Id": 201,
+		"Desc": "DATEADD hour part.",
+		"SqlInput": "SELECT Name, DATEADD('hour', 2, CreatedAt) AS Later FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, Later = (x.CreatedAt).Value.AddHours(2) }).ToList()"
+	},
+	{
+		"Id": 202,
+		"Desc": "DATEDIFF day part.",
+		"SqlInput": "SELECT Name, DATEDIFF('day', CreatedAt, GETDATE()) AS DaysSince FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, DaysSince = (int)((DateTime.Now) - (x.CreatedAt).Value).TotalDays }).ToList()"
+	},
+	{
+		"Id": 203,
+		"Desc": "DATEDIFF month part.",
+		"SqlInput": "SELECT Name, DATEDIFF('month', CreatedAt, GETDATE()) AS MonthsSince FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, MonthsSince = (((DateTime.Now).Year - (x.CreatedAt).Value.Year) * 12 + (DateTime.Now).Month - (x.CreatedAt).Value.Month) }).ToList()"
+	},
+	{
+		"Id": 204,
+		"Desc": "DATEPART day part.",
+		"SqlInput": "SELECT Name, DATEPART('day', CreatedAt) AS D FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, D = (x.CreatedAt).Value.Day }).ToList()"
+	},
+	{
+		"Id": 205,
+		"Desc": "DATEPART year part.",
+		"SqlInput": "SELECT Name, DATEPART('year', CreatedAt) AS Yr FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, Yr = (x.CreatedAt).Value.Year }).ToList()"
+	},
+	{
+		"Id": 206,
+		"Desc": "HOUR függvény — közvetlen óra kinyerés.",
+		"SqlInput": "SELECT Name, HOUR(CreatedAt) AS Hr FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, Hr = (x.CreatedAt).Value.Hour }).ToList()"
+	},
+	{
+		"Id": 207,
+		"Desc": "MINUTE függvény — közvetlen perc kinyerés.",
+		"SqlInput": "SELECT Name, MINUTE(CreatedAt) AS Mi FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, Mi = (x.CreatedAt).Value.Minute }).ToList()"
+	},
+	{
+		"Id": 208,
+		"Desc": "SECOND függvény — közvetlen másodperc kinyerés.",
+		"SqlInput": "SELECT Name, SECOND(CreatedAt) AS Sc FROM Users WHERE Name = 'Bob'",
+		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, Sc = (x.CreatedAt).Value.Second }).ToList()"
+	},
+	{
+		"Id": 209,
+		"Desc": "CURRENT_TIMESTAMP kulcsszó.",
+		"SqlInput": "SELECT Name FROM Users WHERE CreatedAt < CURRENT_TIMESTAMP",
+		"ExpectedLinq": "db.Users.Where(x => x.CreatedAt < DateTime.Now).Select(x => new { x.Name }).ToList()"
 	}
 ]

@@ -1,20 +1,16 @@
 using System;
+using System.IO;
 using System.Linq;
 using SqlToLinq.Core;
 using NUnit.Framework;
 using System.Reflection;
 using System.Collections;
 using Microsoft.Data.Sqlite;
-using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace SqlToLinq.Tests {
-
-    public class ScriptGlobals {
-        public TestDbContext db;
-    }
 
     /// <summary>
     /// Semantic (execution-based) equivalence test: it executes every SqlInput
@@ -26,6 +22,43 @@ namespace SqlToLinq.Tests {
 
     [TestFixture]
     public class SemanticEquivalenceTests {
+
+        // Tests skipped because the raw SQL uses functions not supported by the
+        // SQLite in-memory provider. The transpiler output is still verified by
+        // TranspilerTests and EfCoreEdgeCaseTests.
+
+        private static readonly HashSet<int> SqliteUnsupportedTestIds = new() {
+
+            // Date functions — SQLite has no YEAR(), MONTH(), GETDATE() etc.
+            181, // YEAR
+            182, // GETDATE()
+            183, // CURRENT_DATE
+            184, // DATEADD day
+            185, // DATEDIFF year
+            186, // DATEPART month
+            187, // MONTH
+            188, // DAY
+            199, // DATEADD month
+            200, // DATEADD year
+            201, // DATEADD hour
+            202, // DATEDIFF day
+            203, // DATEDIFF month
+            204, // DATEPART day
+            205, // DATEPART year
+            206, // HOUR
+            207, // MINUTE
+            208, // SECOND
+            209, // CURRENT_TIMESTAMP
+
+            // String functions not supported by SQLite
+            180, // CHARINDEX
+            191, // CONCAT
+            193, // REVERSE
+            194, // REPEAT
+            195, // SPACE
+            196, // LCASE
+            197, // UCASE
+        };
 
         private SqliteConnection _connection;
         private TestDbContext _db;
@@ -49,29 +82,20 @@ namespace SqlToLinq.Tests {
         }
 
         [TestCaseSource(typeof(TranspilerTests), nameof(TranspilerTests.GetSelectTestCases))]
-        public async Task Generated_Linq_Should_Return_Same_Rows_As_Sql(string sqlInput, string _unusedExpectedLinq) {
+        public void Generated_Linq_Should_Return_Same_Rows_As_Sql(string sqlInput, string _unusedExpectedLinq) {
 
-            bool hasOuterJoin =
-                sqlInput.IndexOf("LEFT JOIN", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                sqlInput.IndexOf("RIGHT JOIN", StringComparison.OrdinalIgnoreCase) >= 0;
+            var testName = TestContext.CurrentContext.Test.Name;
+            var idStr = testName.Split('_').Skip(1).FirstOrDefault();
 
-            bool hasGroupByOrderBy =
-                sqlInput.IndexOf("GROUP BY", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                sqlInput.IndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            bool hasConcat =
-                sqlInput.IndexOf("CONCAT(", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                sqlInput.Contains("||");
-
-            if (hasOuterJoin || hasGroupByOrderBy || hasConcat) {
-                Assert.Ignore("Not supported in CSharpScript semantic test: outer join / GROUP BY+ORDER BY alias / CONCAT.");
+            if (int.TryParse(idStr, out int testId) && SqliteUnsupportedTestIds.Contains(testId)) {
+                Assert.Ignore($"Test {testId} skipped: SQLite does not support this function. Verified by TranspilerTests.");
             }
 
             var sqlRows = RunRawSql(sqlInput);
 
             string generatedLinq = SqlToLinqConverter.Convert(sqlInput);
 
-            var linqRows = await RunGeneratedLinq(generatedLinq);
+            var linqRows = RunGeneratedLinq(generatedLinq);
 
             bool orderSensitive = sqlInput.IndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase) >= 0;
 
@@ -87,8 +111,11 @@ namespace SqlToLinq.Tests {
             cmd.CommandText = sql;
 
             using var reader = cmd.ExecuteReader();
+
             while (reader.Read()) {
+
                 var row = new Dictionary<string, object>();
+
                 for (int i = 0; i < reader.FieldCount; i++) {
                     row[NormalizeKey(reader.GetName(i))] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 }
@@ -97,20 +124,53 @@ namespace SqlToLinq.Tests {
             return rows;
         }
 
-        private async Task<List<Dictionary<string, object>>> RunGeneratedLinq(string linqCode) {
+        private List<Dictionary<string, object>> RunGeneratedLinq(string linqCode) {
 
-            var options = ScriptOptions.Default
-                .WithReferences(
-                    typeof(object).Assembly,
-                    typeof(Enumerable).Assembly,
-                    typeof(System.Text.RegularExpressions.Regex).Assembly,
-                    typeof(TestDbContext).Assembly)
-                .WithImports("System", "System.Linq", "System.Text.RegularExpressions", "System.Collections.Generic");
+            string source = $@" 
+                using System;
+                using System.Linq;
+                using System.Collections.Generic;
+                using System.Text.RegularExpressions;
+                using Microsoft.EntityFrameworkCore;
+                using SqlToLinq.Tests;
 
-            var globals = new ScriptGlobals { db = _db };
+                public static class LinqRunner {{
+                    public static object Run(TestDbContext db) {{
+                        return {linqCode};
+                    }}
+            }}";
 
-            object result = await CSharpScript.EvaluateAsync<object>(linqCode, options, globals);
+            var references = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+                .Select(a => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(a.Location))
+                .ToList();
 
+            var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+                assemblyName: "LinqRunnerAssembly",
+                syntaxTrees: new[] {
+                    Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source)
+                },
+                references: references,
+                options: new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
+                    Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+
+            using var ms = new System.IO.MemoryStream();
+            var emitResult = compilation.Emit(ms);
+
+            if (!emitResult.Success) {
+                var errors = string.Join("\n", emitResult.Diagnostics
+                    .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+                    .Select(d => d.ToString()));
+                throw new InvalidOperationException(
+                    $"[ERROR] Roslyn compilation failed.\nLINQ: {linqCode}\nErrors:\n{errors}");
+            }
+
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+            var assembly = System.Reflection.Assembly.Load(ms.ToArray());
+            var type = assembly.GetType("LinqRunner");
+            var method = type.GetMethod("Run");
+
+            object result = method.Invoke(null, new object[] { _db });
             return ToRowList(result);
         }
 
@@ -184,12 +244,24 @@ namespace SqlToLinq.Tests {
 
         private static string SerializeRow(Dictionary<string, object> row) {
             var parts = row.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                            .Select(kv => $"{kv.Key}={kv.Value ?? "NULL"}");
+                           .Select(kv => $"{kv.Key}={NormalizeValue(kv.Value)}");
+
             return string.Join("|", parts);
         }
 
+        private static string NormalizeValue(object value) {
+
+            if (value == null) return "NULL";
+            if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is float f) return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is decimal m) return m.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            return value.ToString();
+        }
+
         [Test]
-        public async Task Randomly_Generated_Fuzz_Sql_Should_Return_Same_Rows_As_Linq() {
+        public void Randomly_Generated_Fuzz_Sql_Should_Return_Same_Rows_As_Linq() {
 
             var generator = new RandomSqlGenerator(seed: 1111);
             int testCount = 300;
@@ -205,24 +277,11 @@ namespace SqlToLinq.Tests {
                 string sqlInput = generator.NextSelect();
                 string generatedLinq = "";
 
-                bool hasOuterJoin =
-                    sqlInput.IndexOf("LEFT JOIN", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    sqlInput.IndexOf("RIGHT JOIN", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                bool hasConcat =
-                    sqlInput.IndexOf("CONCAT(", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    sqlInput.Contains("||");
-
-                if (hasOuterJoin || hasConcat) {
-                    File.AppendAllText(logFilePath, $"[{i + 1:D3}/{testCount}] [SKIP] SQL: {sqlInput}\nReason: outer join / CONCAT not supported in CSharpScript semantic test\n--------------------------------------------------\n");
-                    continue;
-                }
-
                 try {
                     generatedLinq = SqlToLinqConverter.Convert(sqlInput);
 
                     var sqlRows = RunRawSql(sqlInput);
-                    var linqRows = await RunGeneratedLinq(generatedLinq);
+                    var linqRows = RunGeneratedLinq(generatedLinq);
 
                     bool orderSensitive = sqlInput.IndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase) >= 0;
 
