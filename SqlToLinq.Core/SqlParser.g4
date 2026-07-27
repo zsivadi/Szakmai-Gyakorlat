@@ -4,8 +4,6 @@ query : selectQuery SEMICOLON? EOF ;
 
 selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
 
-subquery : '(' selectQuery ')' ;
-
 statement : selectStmt 
           | updateStmt 
           | insertStmt 
@@ -30,6 +28,8 @@ tableSource : tableRef            # tableRefSource
             ;
 
 tableRef : tableName (AS? alias)? ;
+
+subquery : '(' selectQuery ')' ;
 
 joinClause : joinType? JOIN tableRef ON condition ;
 
@@ -92,6 +92,9 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | IDENTIFIER '(' (STAR | expr) ')'                         # aggregateExpr
      | IDENTIFIER '(' expr COMMA expr ')'                       # stringFunc2Expr
      | IDENTIFIER '(' expr COMMA expr COMMA expr ')'            # stringFunc3Expr
+     | IDENTIFIER '(' ')'                                       # noArgFuncExpr
+     | CURRENT_DATE                                             # currentDateExpr
+     | CURRENT_TIMESTAMP                                        # currentTimestampExpr
      | caseExpr                                                 # caseExprAlt
      | subquery                                                 # scalarSubqueryExpr
      | '(' expr ')'                                             # parenExpr
@@ -150,8 +153,10 @@ LIMIT 		: [Ll][Ii][Mm][Ii][Tt] ;
 OFFSET		: [Oo][Ff][Ff][Ss][Ee][Tt] ;
 UNION		: [Uu][Nn][Ii][Oo][Nn] ;
 ALL			: [Aa][Ll][Ll] ;
-INTERSECT	: [Ii][Nn][Tt][Ee][Rr][Ss][Ee][Cc][Tt] ;
-EXISTS		: [Ee][Xx][Ii][Ss][Tt][Ss] ;
+INTERSECT	    : [Ii][Nn][Tt][Ee][Rr][Ss][Ee][Cc][Tt] ;
+EXISTS		    : [Ee][Xx][Ii][Ss][Tt][Ss] ;
+CURRENT_DATE      : [Cc][Uu][Rr][Rr][Ee][Nn][Tt][_][Dd][Aa][Tt][Ee] ;
+CURRENT_TIMESTAMP : [Cc][Uu][Rr][Rr][Ee][Nn][Tt][_][Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp] ;
 EXCEPT		: [Ee][Xx][Cc][Ee][Pp][Tt] ;
 IN      	: [Ii][Nn] ;
 IS      	: [Ii][Ss] ;

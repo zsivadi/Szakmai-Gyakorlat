@@ -148,6 +148,7 @@ namespace SqlToLinq.Core {
             var savedTableAliases = _tableAliases;
             var savedHasJoin = _hasJoin;
             var savedLambdaParam = _currentLambdaParam;
+
             var savedInWhereClause = _inWhereClause;
             var savedInAggregate = _inAggregate;
             var savedInOrderBy = _inOrderBy;
@@ -191,9 +192,6 @@ namespace SqlToLinq.Core {
                 _hasJoin = savedHasJoin;
                 _selectAliases = savedSelectAliases;
                 _currentLambdaParam = savedLambdaParam;
-                _inWhereClause = savedInWhereClause;
-                _inAggregate = savedInAggregate;
-                _inOrderBy = savedInOrderBy;
 
                 return BuildInlineViewQuery(context, viewQuery, baseAlias);
             }
@@ -347,7 +345,12 @@ namespace SqlToLinq.Core {
                 }
             }
 
-            // Columns  
+            // Columns
+
+            if (hasGroupBy && _outerScopes.Count > 0) {
+                var (topAliases, _) = _outerScopes.Pop();
+                _outerScopes.Push((topAliases, "g.FirstOrDefault()"));
+            }
 
             var columnsNode = Visit(context.columnList());
             bool isGlobalSingleAggregate = false;
@@ -360,7 +363,7 @@ namespace SqlToLinq.Core {
 
                 if (globalAggNode.Argument != null) {
                     aggMethod.Arguments.Add(new LinqLambdaNode {
-                        ParameterName = _currentLambdaParam,
+                        ParameterName = "x",
                         Body = globalAggNode.Argument
                     });
                 }
@@ -455,6 +458,7 @@ namespace SqlToLinq.Core {
             _hasJoin = savedHasJoin;
             _selectAliases = savedSelectAliases;
             _currentLambdaParam = savedLambdaParam;
+
             _inWhereClause = savedInWhereClause;
             _inAggregate = savedInAggregate;
             _inOrderBy = savedInOrderBy;
@@ -869,7 +873,10 @@ namespace SqlToLinq.Core {
             new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) {
                 "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH",
                 "ABS", "FLOOR", "CEIL", "CEILING", "SQRT", "SIGN", "ROUND",
-                "COALESCE", "NULLIF"
+                "COALESCE", "NULLIF",
+                "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
+                "SPACE", "REVERSE", "STR", "LCASE", "UCASE",
+                "CHARINDEX", "INSTR"
             };
 
         public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
@@ -1092,7 +1099,7 @@ namespace SqlToLinq.Core {
             };
         }
 
-        // Scalar subquery in expr position
+        // Scalar subquery in expr position:  (SELECT MAX(Points) FROM Users)
 
         public override LinqNode VisitScalarSubqueryExpr([NotNull] SqlParserParser.ScalarSubqueryExprContext context) {
 
@@ -1106,6 +1113,38 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitBooleanColumnCondition([NotNull] SqlParserParser.BooleanColumnConditionContext context) {
             return Visit(context.expr());
+        }
+
+        // Zero-argument functions: GETDATE(), NOW(), CURDATE() etc.
+
+        public override LinqNode VisitNoArgFuncExpr([NotNull] SqlParserParser.NoArgFuncExprContext context) {
+
+            string funcName = context.IDENTIFIER().GetText().ToUpperInvariant();
+
+            return funcName switch {
+                "GETDATE" => new LinqDateConstantNode { Kind = "Now" },
+                "NOW" => new LinqDateConstantNode { Kind = "Now" },
+                "SYSDATETIME" => new LinqDateConstantNode { Kind = "Now" },
+                "GETUTCDATE" => new LinqConstantNode { Value = "DateTime.UtcNow" },
+                "CURDATE" => new LinqDateConstantNode { Kind = "Date" },
+                "CURTIME" => new LinqConstantNode { Value = "DateTime.Now.TimeOfDay" },
+                "RAND" => new LinqConstantNode { Value = "new Random().NextDouble()" },
+                _ => throw new NotSupportedException(
+                    $"[ERROR] Unsupported zero-argument function: '{funcName}'. " +
+                    $"Supported: GETDATE, NOW, SYSDATETIME, GETUTCDATE, CURDATE, CURTIME, RAND.")
+            };
+        }
+
+        // CURRENT_DATE keyword (SQL:1999, no parentheses)
+
+        public override LinqNode VisitCurrentDateExpr([NotNull] SqlParserParser.CurrentDateExprContext context) {
+            return new LinqDateConstantNode { Kind = "Date" };
+        }
+
+        // CURRENT_TIMESTAMP keyword (SQL:1999, no parentheses)
+
+        public override LinqNode VisitCurrentTimestampExpr([NotNull] SqlParserParser.CurrentTimestampExprContext context) {
+            return new LinqDateConstantNode { Kind = "Now" };
         }
 
         // CASE WHEN 
@@ -1194,7 +1233,9 @@ namespace SqlToLinq.Core {
                 if (_hasJoin) {
                     return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
                 }
-
+                // Use the current lambda parameter, not the raw SQL alias.
+                // The SQL alias (e.g. "s", "u") only exists in SQL syntax;
+                // the generated C# lambda param is _currentLambdaParam ("x", "s", "o" etc.)
                 return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{columnName}" };
             }
 

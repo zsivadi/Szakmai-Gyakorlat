@@ -258,6 +258,7 @@ namespace SqlToLinq.Core {
             string arg2 = Arguments.Count > 2 ? Arguments[2].ToCodeString() : "";
 
             return FunctionName.ToUpperInvariant() switch {
+                
                 "UPPER" => $"{arg0}.ToUpper()",
                 "LOWER" => $"{arg0}.ToLower()",
                 "TRIM" => $"{arg0}.Trim()",
@@ -268,6 +269,20 @@ namespace SqlToLinq.Core {
                 "COALESCE" => $"({arg0} ?? {arg1})",
                 "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
                 "CONCAT" => $"string.Concat({arg0}, {arg1})",
+
+                "REPLACE" => $"{arg0}.Replace({arg1}, {arg2})",
+                "LEFT" => $"{arg0}.Substring(0, {arg1})",
+                "RIGHT" => $"({arg0}).Substring(({arg0}).Length - ({arg1}))",
+                "CHARINDEX" => $"({arg1}).IndexOf({arg0}) + 1",
+                "INSTR" => $"({arg0}).IndexOf({arg1}) + 1",
+                "REPEAT" => $"string.Concat(System.Linq.Enumerable.Repeat({arg0}, {arg1}))",
+                "REVERSE" => $"new string(({arg0}).Reverse().ToArray())",
+                "SPACE" => $"new string(' ', {arg0})",
+                "STUFF" => $"({arg0}).Remove({arg1} - 1, {arg2}).Insert({arg1} - 1, \"{arg2}\")",
+                "STR" => $"({arg0}).ToString()",
+                "LCASE" => $"{arg0}.ToLower()",
+                "UCASE" => $"{arg0}.ToUpper()",
+
                 "ROUND" => arg1 != "" ? $"Math.Round((double)({arg0}), {arg1})" : $"Math.Round((double)({arg0}))",
                 "ABS" => $"Math.Abs((int)({arg0}))",
                 "FLOOR" => $"Math.Floor((double)({arg0}))",
@@ -276,16 +291,88 @@ namespace SqlToLinq.Core {
                 "POWER" => $"Math.Pow((double)({arg0}), (double)({arg1}))",
                 "SQRT" => $"Math.Sqrt((double)({arg0}))",
                 "SIGN" => $"Math.Sign((int)({arg0}))",
+                "MOD" => $"({arg0}) % ({arg1})",
+
+                "YEAR" => $"({arg0}).Year",
+                "MONTH" => $"({arg0}).Month",
+                "DAY" => $"({arg0}).Day",
+                "HOUR" => $"({arg0}).Hour",
+                "MINUTE" => $"({arg0}).Minute",
+                "SECOND" => $"({arg0}).Second",
+
+                "FORMAT" => $"({arg0}).ToString({arg1})",
+                "CONVERT" => $"System.Convert.ToDateTime({arg1})",
+
+                "DATEADD" => GenerateDateAdd(arg0, arg1, arg2),
+                "DATEDIFF" => GenerateDateDiff(arg0, arg1, arg2),
+                "DATEPART" => GenerateDatePart(arg0, arg1),
 
                 _ => throw new System.NotSupportedException(
+
                     $"[ERROR] Unsupported function: '{FunctionName}'. " +
-                    $"Supported: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, " +
-                    $"CONCAT, COALESCE, NULLIF, ROUND, ABS, FLOOR, CEIL, CEILING, POWER, SQRT, SIGN.")
+                    $"Supported string: UPPER, LOWER, TRIM, LTRIM, RTRIM, LENGTH, SUBSTRING, CONCAT, " +
+                    $"COALESCE, NULLIF, REPLACE, LEFT, RIGHT, CHARINDEX, INSTR, REPEAT, REVERSE, SPACE, STR. " +
+                    $"Supported math: ABS, FLOOR, CEIL, CEILING, ROUND, POWER, SQRT, SIGN, MOD. " +
+                    $"Supported date: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, FORMAT, DATEADD, DATEDIFF, DATEPART.")
+            };
+        }
+
+        private static string GenerateDateAdd(string part, string n, string date) {
+
+            string p = part.Trim('"').Trim('\'').ToUpperInvariant()
+                           .Replace("X.", "").Replace("_", "");  
+            return p switch {
+
+                "YEAR" => $"({date}).AddYears((int)({n}))",
+                "MONTH" => $"({date}).AddMonths((int)({n}))",
+                "DAY" => $"({date}).AddDays((int)({n}))",
+                "HOUR" => $"({date}).AddHours((int)({n}))",
+                "MINUTE" => $"({date}).AddMinutes((int)({n}))",
+                "SECOND" => $"({date}).AddSeconds((int)({n}))",
+                _ => throw new System.NotSupportedException($"[ERROR] DATEADD: unsupported part '{part}'.")
+            };
+        }
+
+        private static string GenerateDateDiff(string part, string start, string end) {
+            string p = part.Trim('"').Trim('\'').ToUpperInvariant()
+                           .Replace("X.", "").Replace("_", "");
+            return p switch {
+
+                "YEAR" => $"(({end}).Year - ({start}).Year)",
+                "MONTH" => $"((({end}).Year - ({start}).Year) * 12 + ({end}).Month - ({start}).Month)",
+                "DAY" => $"(int)(({end}) - ({start})).TotalDays",
+                "HOUR" => $"(int)(({end}) - ({start})).TotalHours",
+                "MINUTE" => $"(int)(({end}) - ({start})).TotalMinutes",
+                "SECOND" => $"(int)(({end}) - ({start})).TotalSeconds",
+                _ => throw new System.NotSupportedException($"[ERROR] DATEDIFF: unsupported part '{part}'.")
+            };
+        }
+
+        private static string GenerateDatePart(string part, string date) {
+
+            string p = part.Trim('"').Trim('\'').ToUpperInvariant()
+                           .Replace("X.", "").Replace("_", "");
+            return p switch {
+
+                "YEAR" => $"({date}).Year",
+                "MONTH" => $"({date}).Month",
+                "DAY" => $"({date}).Day",
+                "HOUR" => $"({date}).Hour",
+                "MINUTE" => $"({date}).Minute",
+                "SECOND" => $"({date}).Second",
+                _ => throw new System.NotSupportedException($"[ERROR] DATEPART: unsupported part '{part}'.")
             };
         }
     }
 
-    // Regex for LIKE patterns
+    // GETDATE() / NOW() / CURRENT_DATE / CURRENT_TIMESTAMP
+
+    public class LinqDateConstantNode : LinqNode {
+
+        public string Kind { get; set; }
+
+        public override string ToCodeString() => Kind == "Date" ? "DateTime.Today" : "DateTime.Now";
+    }
 
     public class LinqRegexMatchNode : LinqNode {
 
