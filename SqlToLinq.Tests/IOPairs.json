@@ -1240,5 +1240,23 @@
 		"Desc": "CURRENT_TIMESTAMP kulcsszó.",
 		"SqlInput": "SELECT Name FROM Users WHERE CreatedAt < CURRENT_TIMESTAMP",
 		"ExpectedLinq": "db.Users.Where(x => x.CreatedAt < DateTime.Now).Select(x => new { x.Name }).ToList()"
+	},
+	{
+	"Id": 210,
+	"Desc": "TRUE literál WHERE-ben.",
+	"SqlInput": "SELECT Name FROM Users WHERE TRUE",
+	"ExpectedLinq": "db.Users.Where(x => true).Select(x => new { x.Name }).ToList()"
+	},
+	{
+	"Id": 211,
+	"Desc": "FALSE literál WHERE-ben.",
+	"SqlInput": "SELECT Name FROM Users WHERE FALSE",
+	"ExpectedLinq": "db.Users.Where(x => false).Select(x => new { x.Name }).ToList()"
+	},
+	{
+	"Id": 212,
+	"Desc": "TRUE CASE WHEN THEN-ben.",
+	"SqlInput": "SELECT Name, CASE WHEN Age > 18 THEN TRUE ELSE FALSE END AS IsAdult FROM Users",
+	"ExpectedLinq": "db.Users.Select(x => new { x.Name, IsAdult = (x.Age > 18 ? true : false) }).ToList()"
 	}
 ]

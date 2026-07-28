@@ -278,7 +278,7 @@ namespace SqlToLinq.Tests {
 
             if (correlated) {
 
-                string outerAlias = _activeTables[0].Alias;  
+                string outerAlias = _activeTables[0].Alias;
                 string extra = _rng.Next(2) == 0
                     ? $" AND {alias}.Qty {Pick(NumericOps)} {_rng.Next(1, 3)}"
                     : "";
@@ -364,17 +364,24 @@ namespace SqlToLinq.Tests {
 
             int branches = _rng.Next(1, 3);
             var sb = new StringBuilder("CASE");
-            bool useNumeric = _rng.Next(2) == 0;
+
+            bool useBool = _rng.Next(5) == 0;
+            bool useNumeric = !useBool && _rng.Next(2) == 0;
 
             for (int i = 0; i < branches; i++) {
 
                 string cond = RandomSimpleCondition();
-                string result = useNumeric ? _rng.Next(0, 100).ToString() : $"'{Pick(StringValues)}'";
+                string result = useBool ? (_rng.Next(2) == 0 ? "TRUE" : "FALSE")
+                              : useNumeric ? _rng.Next(0, 100).ToString()
+                              : $"'{Pick(StringValues)}'";
 
                 sb.Append($" WHEN {cond} THEN {result}");
             }
 
-            string elseVal = useNumeric ? _rng.Next(0, 100).ToString() : $"'{Pick(StringValues)}'";
+            string elseVal = useBool ? (_rng.Next(2) == 0 ? "TRUE" : "FALSE")
+                           : useNumeric ? _rng.Next(0, 100).ToString()
+                           : $"'{Pick(StringValues)}'";
+
             sb.Append($" ELSE {elseVal} END");
 
             return sb.ToString();
