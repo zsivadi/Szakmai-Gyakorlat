@@ -1133,6 +1133,16 @@ namespace SqlToLinq.Core {
             return new LinqDateConstantNode { Kind = "Now" };
         }
 
+        // TRUE / FALSE boolean literals
+
+        public override LinqNode VisitTrueExpr([NotNull] SqlParserParser.TrueExprContext context) {
+            return new LinqConstantNode { Value = true };
+        }
+
+        public override LinqNode VisitFalseExpr([NotNull] SqlParserParser.FalseExprContext context) {
+            return new LinqConstantNode { Value = false };
+        }
+
         // CASE WHEN 
 
         public override LinqNode VisitCaseExprAlt([NotNull] SqlParserParser.CaseExprAltContext context) {

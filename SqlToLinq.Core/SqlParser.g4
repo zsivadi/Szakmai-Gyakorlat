@@ -95,6 +95,8 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | IDENTIFIER '(' ')'                                       # noArgFuncExpr
      | CURRENT_DATE                                             # currentDateExpr
      | CURRENT_TIMESTAMP                                        # currentTimestampExpr
+     | TRUE_TOKEN                                               # trueExpr
+     | FALSE_TOKEN                                              # falseExpr
      | caseExpr                                                 # caseExprAlt
      | subquery                                                 # scalarSubqueryExpr
      | '(' expr ')'                                             # parenExpr
@@ -157,6 +159,8 @@ INTERSECT	    : [Ii][Nn][Tt][Ee][Rr][Ss][Ee][Cc][Tt] ;
 EXISTS		    : [Ee][Xx][Ii][Ss][Tt][Ss] ;
 CURRENT_DATE      : [Cc][Uu][Rr][Rr][Ee][Nn][Tt][_][Dd][Aa][Tt][Ee] ;
 CURRENT_TIMESTAMP : [Cc][Uu][Rr][Rr][Ee][Nn][Tt][_][Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp] ;
+TRUE_TOKEN        : [Tt][Rr][Uu][Ee] ;
+FALSE_TOKEN       : [Ff][Aa][Ll][Ss][Ee] ;
 EXCEPT		: [Ee][Xx][Cc][Ee][Pp][Tt] ;
 IN      	: [Ii][Nn] ;
 IS      	: [Ii][Ss] ;

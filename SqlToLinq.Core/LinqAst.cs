@@ -202,6 +202,9 @@ namespace SqlToLinq.Core {
             if (Value is string str) {
                 return $"\"{str}\"";
             }
+            if (Value is bool b) {
+                return b ? "true" : "false";
+            }
             if (Value is double d) {
                 return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
