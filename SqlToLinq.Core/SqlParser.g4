@@ -90,8 +90,7 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | left=expr CONCAT right=expr                              # concatExpr
      | IDENTIFIER '(' DISTINCT expr ')'                         # distinctAggregateExpr
      | IDENTIFIER '(' (STAR | expr) ')'                         # aggregateExpr
-     | IDENTIFIER '(' expr COMMA expr ')'                       # stringFunc2Expr
-     | IDENTIFIER '(' expr COMMA expr COMMA expr ')'            # stringFunc3Expr
+     | IDENTIFIER '(' expr (COMMA expr)+ ')'                    # funcCallExpr
      | IDENTIFIER '(' ')'                                       # noArgFuncExpr
      | CURRENT_DATE                                             # currentDateExpr
      | CURRENT_TIMESTAMP                                        # currentTimestampExpr

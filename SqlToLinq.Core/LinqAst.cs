@@ -139,42 +139,37 @@ namespace SqlToLinq.Core {
         }
 
         private static string ExtractScalarInnerQuery(LinqNode inner) {
+            if (inner is LinqQueryNode qn) {
+                var sb = new System.Text.StringBuilder($"db.{qn.SourceTable}");
 
-            if (inner is not LinqQueryNode qn) {
+                LinqMethodCallNode scalarSelect = null;
 
-                string raw = inner.ToCodeString();
+                foreach (var method in qn.Methods) {
+                    if (method is LinqMethodCallNode m) {
+                        if (m.MethodName == "ToList") break;
+                        if (m.MethodName == "Select") {
+                            scalarSelect = m;
+                            break;
+                        }
+                    }
 
-                if (raw.EndsWith(".ToList()")) raw = raw.Substring(0, raw.Length - ".ToList()".Length);
-                return raw;
-            }
-
-            var sb = new System.Text.StringBuilder($"db.{qn.SourceTable}");
-
-            LinqMethodCallNode scalarSelect = null;
-
-            foreach (var method in qn.Methods) {
-
-                if (method is LinqMethodCallNode m) {
-                    if (m.MethodName == "ToList") break;
-                    if (m.MethodName == "Select") { scalarSelect = m; break; }
+                    sb.Append(method.ToCodeString());
                 }
-                sb.Append(method.ToCodeString());
+
+                if (scalarSelect?.Arguments.Count == 1 &&
+                    scalarSelect.Arguments[0] is LinqLambdaNode lambda &&
+                    lambda.Body is LinqAnonymousObjectNode anon &&
+                    anon.Properties.Count == 1) {
+                    string param = lambda.ParameterName;
+                    string colExpr = anon.Properties[0].Expression.ToCodeString();
+
+                    sb.Append($".Select({param} => {colExpr})");
+                }
+
+                return sb.ToString();
             }
 
-            if (scalarSelect?.Arguments.Count == 1 &&
-                scalarSelect.Arguments[0] is LinqLambdaNode lambda &&
-                lambda.Body is LinqAnonymousObjectNode anon &&
-                anon.Properties.Count == 1) {
-
-                string param = lambda.ParameterName;
-                string colExpr = anon.Properties[0].Expression.ToCodeString();
-
-                sb.Append($".Select({param} => {colExpr})");
-            } else if (scalarSelect != null) {
-                sb.Append(scalarSelect.ToCodeString());
-            }
-
-            return sb.ToString();
+            return inner.ToCodeString().Substring(0, inner.ToCodeString().Length - ".ToList()".Length); 
         }
     }
 
@@ -202,12 +197,15 @@ namespace SqlToLinq.Core {
             if (Value is string str) {
                 return $"\"{str}\"";
             }
+
             if (Value is bool b) {
                 return b ? "true" : "false";
             }
+
             if (Value is double d) {
                 return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
+
             return Value?.ToString() ?? "null";
         }
     }
@@ -259,55 +257,80 @@ namespace SqlToLinq.Core {
             string arg0 = Arguments.Count > 0 ? Arguments[0].ToCodeString() : "";
             string arg1 = Arguments.Count > 1 ? Arguments[1].ToCodeString() : "";
             string arg2 = Arguments.Count > 2 ? Arguments[2].ToCodeString() : "";
+            string arg3 = Arguments.Count > 3 ? Arguments[3].ToCodeString() : "";
 
             return FunctionName.ToUpperInvariant() switch {
 
+                // Case conversion
                 "UPPER" => $"{arg0}.ToUpper()",
                 "LOWER" => $"{arg0}.ToLower()",
-                "TRIM" => $"{arg0}.Trim()",
-                "LTRIM" => $"{arg0}.TrimStart()",
-                "RTRIM" => $"{arg0}.TrimEnd()",
-                "LENGTH" => $"{arg0}.Length",
-                "SUBSTRING" => $"{arg0}.Substring({arg1} - 1, {arg2})",
-                "COALESCE" => $"({arg0} ?? {arg1})",
-                "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
-                "CONCAT" => $"string.Concat({arg0}, {arg1})",
-
-                "REPLACE" => $"{arg0}.Replace({arg1}, {arg2})",
-                "LEFT" => $"{arg0}.Substring(0, {arg1})",
-                "RIGHT" => $"({arg0}).Substring(({arg0}).Length - ({arg1}))",
-                "CHARINDEX" => $"({arg1}).IndexOf({arg0}) + 1",
-                "INSTR" => $"({arg0}).IndexOf({arg1}) + 1",
-                "REPEAT" => $"string.Concat(System.Linq.Enumerable.Repeat({arg0}, {arg1}))",
-                "REVERSE" => $"new string(({arg0}).Reverse().ToArray())",
-                "SPACE" => $"new string(' ', {arg0})",
-                "STUFF" => $"({arg0}).Remove({arg1} - 1, {arg2}).Insert({arg1} - 1, \"{arg2}\")",
-                "STR" => $"({arg0}).ToString()",
                 "LCASE" => $"{arg0}.ToLower()",
                 "UCASE" => $"{arg0}.ToUpper()",
 
-                "ROUND" => arg1 != "" ? $"Math.Round((double)({arg0}), {arg1})" : $"Math.Round((double)({arg0}))",
+                // Trimming
+                "TRIM" => $"{arg0}.Trim()",
+                "LTRIM" => $"{arg0}.TrimStart()",
+                "RTRIM" => $"{arg0}.TrimEnd()",
+
+                // String length
+                "LENGTH" => $"{arg0}.Length",
+                "LEN" => $"{arg0}.Length",
+
+                // Substring / searching
+                "SUBSTRING" => $"{arg0}.Substring({arg1} - 1, {arg2})",
+                "CHARINDEX" => $"({arg1}).IndexOf({arg0}) + 1",
+                "INSTR" => $"({arg0}).IndexOf({arg1}) + 1",
+
+                // String modification
+                "REPLACE" => $"{arg0}.Replace({arg1}, {arg2})",
+                "STUFF" => $"({arg0}).Remove({arg1} - 1, {arg2}).Insert({arg1} - 1, {arg3})",
+                "REVERSE" => $"new string(({arg0}).Reverse().ToArray())",
+
+                // String construction
+                "CONCAT" => $"string.Concat({arg0}, {arg1})",
+                "REPEAT" => $"string.Concat(System.Linq.Enumerable.Repeat({arg0}, {arg1}))",
+                "SPACE" => $"new string(' ', {arg0})",
+
+                // Conversion / formatting
+                "STR" => $"({arg0}).ToString()",
+                "FORMAT" => $"({arg0})!.ToString({arg1})",
+
+                "COALESCE" => $"({arg0} ?? {arg1})",
+                "ISNULL" => $"({arg0} ?? {arg1})",
+                "NVL" => $"({arg0} ?? {arg1})",
+                "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
+
                 "ABS" => $"Math.Abs((int)({arg0}))",
+                "MOD" => $"({arg0}) % ({arg1})",
+                "SIGN" => $"Math.Sign((int)({arg0}))",
+
+                "ROUND" => arg1 != ""
+                    ? $"Math.Round((double)({arg0}), {arg1})"
+                    : $"Math.Round((double)({arg0}))",
+
                 "FLOOR" => $"Math.Floor((double)({arg0}))",
                 "CEIL" => $"Math.Ceiling((double)({arg0}))",
                 "CEILING" => $"Math.Ceiling((double)({arg0}))",
+                "TRUNCATE" => $"Math.Floor((double)({arg0}) * Math.Pow(10, {arg1})) / Math.Pow(10, {arg1})",
+
                 "POWER" => $"Math.Pow((double)({arg0}), (double)({arg1}))",
                 "SQRT" => $"Math.Sqrt((double)({arg0}))",
-                "SIGN" => $"Math.Sign((int)({arg0}))",
-                "MOD" => $"({arg0}) % ({arg1})",
+
+                "EXP" => $"Math.Exp((double)({arg0}))",
+                "LOG" => $"Math.Log((double)({arg0}))",
+                "LOG10" => $"Math.Log10((double)({arg0}))",
 
                 "YEAR" => $"({arg0}).Value.Year",
                 "MONTH" => $"({arg0}).Value.Month",
                 "DAY" => $"({arg0}).Value.Day",
+
                 "HOUR" => $"({arg0}).Value.Hour",
                 "MINUTE" => $"({arg0}).Value.Minute",
                 "SECOND" => $"({arg0}).Value.Second",
 
-                "FORMAT" => $"({arg0})!.ToString({arg1})",
-                "CONVERT" => $"System.Convert.ToDateTime({arg1})",
-
                 "DATEADD" => GenerateDateAdd(arg0, arg1, arg2),
                 "DATEDIFF" => GenerateDateDiff(arg0, arg1, arg2),
+
                 "DATEPART" => GenerateDatePart(arg0, arg1),
 
                 _ => throw new System.NotSupportedException(
@@ -446,10 +469,6 @@ namespace SqlToLinq.Core {
 
             string inner = Inner.ToCodeString();
 
-            if (inner.EndsWith(".ToList()")) {
-                inner = inner.Substring(0, inner.Length - ".ToList()".Length);
-            }
-
             if (!AsScalar) return inner;
 
             bool alreadyScalar = inner.EndsWith(".Count()")
@@ -473,10 +492,6 @@ namespace SqlToLinq.Core {
             string inner = Subquery.Inner is LinqQueryNode qn
                 ? qn.ToCodeStringUpToSelect()
                 : Subquery.Inner.ToCodeString();
-
-            if (inner.EndsWith(".ToList()")) {
-                inner = inner.Substring(0, inner.Length - ".ToList()".Length);
-            }
 
             string anyCall = $"({inner}).Any()";
             return Negated ? $"!{anyCall}" : anyCall;
@@ -571,7 +586,7 @@ namespace SqlToLinq.Core {
             string gj = "gj";
 
             string groupJoinResult = $"new {{ {OuterParam}, {collectionParam} }}";
-            string selectManyResult;
+            string selectManyResult = $"new {{ {gj}.{OuterParam}, {InnerParam} }}";
 
             if (ResultSelector is LinqAnonymousObjectNode anonNode) {
 
@@ -589,8 +604,6 @@ namespace SqlToLinq.Core {
                     return string.IsNullOrEmpty(p.Name) ? expr : $"{p.Name} = {expr}";
                 });
                 selectManyResult = $"new {{ {string.Join(", ", rewritten)} }}";
-            } else {
-                selectManyResult = $"new {{ {gj}.{OuterParam}, {InnerParam} }}";
             }
 
             return

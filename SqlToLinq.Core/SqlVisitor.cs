@@ -68,13 +68,6 @@ namespace SqlToLinq.Core {
             return result;
         }
 
-        public override LinqNode VisitStatement([NotNull] SqlParserParser.StatementContext context) {
-
-            if (context.selectStmt() != null) return Visit(context.selectStmt());
-
-            throw new NotSupportedException("[ERROR] Unknown or unsupported command!");
-        }
-
         // Snake_case to PascalCase conversion for table and column names
 
         private string ToPascalCase(string input) {
@@ -84,13 +77,16 @@ namespace SqlToLinq.Core {
             bool isSnakeCase = input.Contains('_');
 
             if (isSnakeCase) {
+
                 var parts = input.Split('_');
                 var sb = new StringBuilder();
+
                 foreach (var part in parts) {
                     if (part.Length == 0) continue;
                     sb.Append(char.ToUpper(part[0]));
                     if (part.Length > 1) sb.Append(part.Substring(1).ToLower());
                 }
+
                 return sb.Length > 0 ? sb.ToString() : input;
             }
 
@@ -532,13 +528,6 @@ namespace SqlToLinq.Core {
 
             // OFFSET / LIMIT
 
-            if (context.offsetClause() != null) {
-                viewQuery.Methods.Add(new LinqMethodCallNode {
-                    MethodName = "Skip",
-                    Arguments = new List<LinqNode> { Visit(context.offsetClause().expr()) }
-                });
-            }
-
             if (context.limitClause() != null) {
                 viewQuery.Methods.Add(new LinqMethodCallNode {
                     MethodName = "Take",
@@ -871,12 +860,18 @@ namespace SqlToLinq.Core {
 
         private static readonly System.Collections.Generic.HashSet<string> StringFunctions =
             new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) {
-                "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH",
+                "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "LENGTH", "LEN",
                 "ABS", "FLOOR", "CEIL", "CEILING", "SQRT", "SIGN", "ROUND",
-                "COALESCE", "NULLIF",
+                "TRUNCATE", "LOG", "LOG10", "EXP",
+                "COALESCE", "NULLIF", "ISNULL", "NVL",
                 "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
                 "SPACE", "REVERSE", "STR", "LCASE", "UCASE",
                 "CHARINDEX", "INSTR"
+            };
+
+        private static readonly System.Collections.Generic.HashSet<string> AggregateFunctions =
+            new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) {
+                "COUNT", "SUM", "AVG", "MIN", "MAX"
             };
 
         public override LinqNode VisitAggregateExpr([NotNull] SqlParserParser.AggregateExprContext context) {
@@ -893,6 +888,13 @@ namespace SqlToLinq.Core {
 
             string funcName = ToPascalCase(rawName);
             if (funcName == "Avg") funcName = "Average";
+
+            if (!AggregateFunctions.Contains(rawName)) {
+                throw new NotSupportedException(
+                    $"[ERROR] Unsupported function: '{rawName}'. " +
+                    $"Supported aggregates: COUNT, SUM, AVG, MIN, MAX. " +
+                    $"Supported string/math/date functions: see documentation.");
+            }
 
             if (funcName == "Count") {
                 return new LinqAggregateNode { FunctionName = "Count", Argument = null };
@@ -911,26 +913,53 @@ namespace SqlToLinq.Core {
             };
         }
 
-        // Two-argument functions: COALESCE, NULLIF, SUBSTRING (without length)
+        // Two or more argument functions
 
-        public override LinqNode VisitStringFunc2Expr([NotNull] SqlParserParser.StringFunc2ExprContext context) {
+        private static readonly Dictionary<string, int> FuncArgCounts =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) {
+
+                // String — 2 args
+
+                { "COALESCE",   2 },
+                { "NULLIF",     2 },
+                { "CONCAT",     2 },
+                { "CHARINDEX",  2 },
+                { "INSTR",      2 },
+                { "REPEAT",     2 },
+                { "POWER",      2 },
+                { "MOD",        2 },
+                { "FORMAT",     2 },
+                { "ISNULL",     2 },
+                { "NVL",        2 },
+                { "TRUNCATE",   2 },
+
+                // String — 3 args
+
+                { "SUBSTRING",  3 },
+                { "REPLACE",    3 },
+                { "DATEADD",    3 },
+                { "DATEDIFF",   3 },
+                { "DATEPART",   2 }, 
+
+                // String — 4 args
+
+                { "STUFF",      4 },
+            };
+
+        public override LinqNode VisitFuncCallExpr([NotNull] SqlParserParser.FuncCallExprContext context) {
 
             string funcName = context.IDENTIFIER().GetText().ToUpperInvariant();
+            var args = context.expr();
+
+            if (FuncArgCounts.TryGetValue(funcName, out int expected) && args.Length != expected) {
+                throw new NotSupportedException(
+                    $"[ERROR] {funcName} expects {expected} argument(s), got {args.Length}.");
+            }
+
             var node = new LinqStringFunctionNode { FunctionName = funcName };
-            node.Arguments.Add(Visit(context.expr(0)));
-            node.Arguments.Add(Visit(context.expr(1)));
-            return node;
-        }
-
-        // Three-argument functions: SUBSTRING
-
-        public override LinqNode VisitStringFunc3Expr([NotNull] SqlParserParser.StringFunc3ExprContext context) {
-
-            string funcName = context.IDENTIFIER().GetText().ToUpperInvariant();
-            var node = new LinqStringFunctionNode { FunctionName = funcName };
-            node.Arguments.Add(Visit(context.expr(0)));
-            node.Arguments.Add(Visit(context.expr(1)));
-            node.Arguments.Add(Visit(context.expr(2)));
+            foreach (var arg in args) {
+                node.Arguments.Add(Visit(arg));
+            }
             return node;
         }
 
@@ -1110,11 +1139,9 @@ namespace SqlToLinq.Core {
             return funcName switch {
                 "GETDATE" => new LinqDateConstantNode { Kind = "Now" },
                 "NOW" => new LinqDateConstantNode { Kind = "Now" },
-                "SYSDATETIME" => new LinqDateConstantNode { Kind = "Now" },
-                "GETUTCDATE" => new LinqConstantNode { Value = "DateTime.UtcNow" },
                 "CURDATE" => new LinqDateConstantNode { Kind = "Date" },
-                "CURTIME" => new LinqConstantNode { Value = "DateTime.Now.TimeOfDay" },
-                "RAND" => new LinqConstantNode { Value = "new Random().NextDouble()" },
+                "GETUTCDATE" => new LinqIdentifierNode { Name = "DateTime.UtcNow" },
+                "RAND" => new LinqIdentifierNode { Name = "new Random().NextDouble()" },
                 _ => throw new NotSupportedException(
                     $"[ERROR] Unsupported zero-argument function: '{funcName}'. " +
                     $"Supported: GETDATE, NOW, SYSDATETIME, GETUTCDATE, CURDATE, CURTIME, RAND.")
@@ -1258,9 +1285,7 @@ namespace SqlToLinq.Core {
                     return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
                 }
                 rawColumnName = resolved;
-            } else if (_selectAliases.ContainsKey(rawColumnName)) {
-                rawColumnName = _selectAliases[rawColumnName];
-            }
+            } 
 
             if (_inWhereClause || _inAggregate) {
                 return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{rawColumnName}" };
@@ -1316,12 +1341,6 @@ namespace SqlToLinq.Core {
             return new LinqConstantNode { Value = double.Parse(context.GetText(), System.Globalization.CultureInfo.InvariantCulture) };
         }
 
-        // Parenthesized expression: (expr)
-
-        public override LinqNode VisitParenExpr([NotNull] SqlParserParser.ParenExprContext context) {
-            return new LinqParensNode { InnerNode = Visit(context.expr()) };
-        }
-
         // COUNT(DISTINCT col) — maps to .Select(x => x.Col).Distinct().Count()
         // but inside GROUP BY context it maps to g.Select(x => x.Col).Distinct().Count()
 
@@ -1334,6 +1353,12 @@ namespace SqlToLinq.Core {
                     $"[ERROR] DISTINCT is only supported inside COUNT(). Got: {rawName}(DISTINCT ...).");
             }
 
+            if (!IsInsideGroupByContext(context)) {
+                throw new NotSupportedException(
+                    "[ERROR] COUNT(DISTINCT col) is only supported inside a GROUP BY query. " +
+                    "Use SELECT COUNT(DISTINCT col) FROM ... GROUP BY ... instead.");
+            }
+
             _inAggregate = true;
             LinqNode argNode = Visit(context.expr());
             _inAggregate = false;
@@ -1341,6 +1366,20 @@ namespace SqlToLinq.Core {
             return new LinqIdentifierNode {
                 Name = $"g.Select(x => {argNode.ToCodeString()}).Distinct().Count()"
             };
+        }
+
+        private static bool IsInsideGroupByContext(Antlr4.Runtime.ParserRuleContext context) {
+
+            var current = context.Parent;
+
+            while (current != null) {
+                if (current is SqlParserParser.SelectStmtContext selectCtx &&
+                    selectCtx.groupClause() != null) {
+                    return true;
+                }
+                current = current.Parent as Antlr4.Runtime.ParserRuleContext;
+            }
+            return false;
         }
 
         // String literal processing, converting to C# string constant
