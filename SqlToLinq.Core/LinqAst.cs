@@ -169,7 +169,7 @@ namespace SqlToLinq.Core {
                 return sb.ToString();
             }
 
-            return inner.ToCodeString().Substring(0, inner.ToCodeString().Length - ".ToList()".Length); 
+            return inner.ToCodeString().Substring(0, inner.ToCodeString().Length - ".ToList()".Length);
         }
     }
 
@@ -510,6 +510,26 @@ namespace SqlToLinq.Core {
 
         public override string ToCodeString() {
             return $"{Left.ToCodeString()}.{MethodName}({Right.ToCodeString()})";
+        }
+    }
+
+    // DELETE FROM table WHERE ...
+
+    public class LinqDeleteNode : LinqNode {
+
+        public string SourceTable { get; set; }
+
+        public LinqNode WhereCondition { get; set; }
+
+        public string LambdaParam { get; set; } = "x";
+
+        public override string ToCodeString() {
+
+            if (WhereCondition != null) {
+                return $"db.{SourceTable}.Where({LambdaParam} => {WhereCondition.ToCodeString()}).ExecuteDeleteAsync()";
+            }
+
+            return $"db.{SourceTable}.ExecuteDeleteAsync()";
         }
     }
 

@@ -32,7 +32,35 @@ namespace SqlToLinq.Core {
         private string _currentLambdaParam = "x";
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
+
+            if (context.deleteStmt() != null) {
+                return Visit(context.deleteStmt());
+            }
+
             return Visit(context.selectQuery());
+        }
+
+        public override LinqNode VisitDeleteStmt([NotNull] SqlParserParser.DeleteStmtContext context) {
+
+            string tableName = ToPascalCase(context.tableName().GetText());
+            string lambdaParam = "x";
+
+            _currentLambdaParam = lambdaParam;
+            _tableAliases = new Dictionary<string, string> { { lambdaParam, tableName } };
+
+            LinqNode whereCondition = null;
+
+            if (context.condition() != null) {
+                _inWhereClause = true;
+                whereCondition = Visit(context.condition());
+                _inWhereClause = false;
+            }
+
+            return new LinqDeleteNode {
+                SourceTable = tableName,
+                WhereCondition = whereCondition,
+                LambdaParam = lambdaParam
+            };
         }
 
         public override LinqNode VisitSelectQuery([NotNull] SqlParserParser.SelectQueryContext context) {
@@ -1255,10 +1283,12 @@ namespace SqlToLinq.Core {
             if (_tableAliases.ContainsKey(tableAlias)) {
                 if (_hasJoin) {
                     return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
-                }
+                }   
+
                 // Use the current lambda parameter, not the raw SQL alias.
                 // The SQL alias (e.g. "s", "u") only exists in SQL syntax;
                 // the generated C# lambda param is _currentLambdaParam ("x", "s", "o" etc.)
+
                 return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{columnName}" };
             }
 
@@ -1285,7 +1315,7 @@ namespace SqlToLinq.Core {
                     return new LinqIdentifierNode { Name = $"g.FirstOrDefault().{rawColumnName}" };
                 }
                 rawColumnName = resolved;
-            } 
+            }
 
             if (_inWhereClause || _inAggregate) {
                 return new LinqIdentifierNode { Name = $"{_currentLambdaParam}.{rawColumnName}" };
