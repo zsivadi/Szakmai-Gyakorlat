@@ -535,6 +535,120 @@ namespace SqlToLinq.Tests {
         }
 
 
+        // ── DELETE ──────────────────────────────────────────────────────────
+
+        [Test]
+        public void Delete_With_Where_Removes_Matching_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Users WHERE Age < 18"));
+
+            Assert.That(deleted, Is.EqualTo(1));                              
+            Assert.That(_db.Users.Count(), Is.EqualTo(5));
+            Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.False);
+        }
+
+        [Test]
+        public void Delete_Without_Where_Removes_All_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Users"));
+
+            Assert.That(deleted, Is.EqualTo(6));
+            Assert.That(_db.Users.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Delete_With_And_Condition_Removes_Correct_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Users WHERE Age > 20 AND Role = 'User'"));
+
+            Assert.That(deleted, Is.EqualTo(2));                              
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(4));
+        }
+
+        [Test]
+        public void Delete_With_In_List_Removes_Correct_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Users WHERE Role IN ('Admin', 'Moderator')"));
+
+            Assert.That(deleted, Is.EqualTo(3));                              
+            Assert.That(_db.Users.Any(u => u.Role == "Admin"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Role == "Moderator"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Delete_With_Is_Null_Removes_No_Rows_When_None_Match() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Orders WHERE Owner IS NULL"));
+
+            Assert.That(deleted, Is.EqualTo(0));                              
+            Assert.That(_db.Orders.Count(), Is.EqualTo(4));
+        }
+
+        [Test]
+        public void Delete_With_Like_Removes_Matching_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert("DELETE FROM Users WHERE Name LIKE 'Ali%'"));
+
+            Assert.That(deleted, Is.EqualTo(1));                              
+            Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(5));
+        }
+
+        private int RunGeneratedDelete(string linqCode) {
+
+            string source = $@"
+                using System;
+                using System.Linq;
+                using Microsoft.EntityFrameworkCore;
+                using SqlToLinq.Tests;
+
+                public static class DeleteRunner {{
+                    public static int Run(TestDbContext db) {{
+                        return {linqCode}.GetAwaiter().GetResult();
+                    }}
+            }}";
+
+            var references = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+                .Select(a => MetadataReference.CreateFromFile(a.Location))
+                .ToList();
+
+            var compilation = CSharpCompilation.Create(
+                assemblyName: "DeleteRunner",
+                syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+            using var ms = new System.IO.MemoryStream();
+            var result = compilation.Emit(ms);
+
+            if (!result.Success) {
+
+                var errors = string.Join("\n", result.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.ToString()));
+
+                throw new InvalidOperationException(
+                    $"[ERROR] Roslyn compilation failed.\nLINQ: {linqCode}\nErrors:\n{errors}");
+            }
+
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+
+            var assembly = Assembly.Load(ms.ToArray());
+            var type = assembly.GetType("DeleteRunner");
+            var method = type.GetMethod("Run");
+
+            return (int)method.Invoke(null, new object[] { _db });
+        }
+
         private void AssertSemanticallyEqual(string sql, bool orderSensitive = false) {
 
             var sqlRows = RunRawSql(sql);

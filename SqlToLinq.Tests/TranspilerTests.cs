@@ -51,7 +51,6 @@ namespace SqlToLinq.Tests {
     [TestFixture]
     public class ErrorPathTests {
 
-
         [Test]
         public void Lexer_Error_Should_Throw_SqlSyntaxException() {
 
@@ -237,6 +236,22 @@ namespace SqlToLinq.Tests {
             };
 
             Assert.Throws<NotSupportedException>(() => node.ToCodeString());
+        }
+
+        [Test]
+        public void Delete_Without_Where_Generates_ExecuteDelete() {
+
+            string linq = SqlToLinqConverter.Convert("DELETE FROM Users");
+
+            Assert.That(linq, Is.EqualTo("db.Users.ExecuteDeleteAsync()"));
+        }
+
+        [Test]
+        public void Delete_With_Where_Generates_Where_ExecuteDelete() {
+
+            string linq = SqlToLinqConverter.Convert("DELETE FROM Users WHERE Age < 18");
+
+            Assert.That(linq, Is.EqualTo("db.Users.Where(x => x.Age < 18).ExecuteDeleteAsync()"));
         }
     }
 

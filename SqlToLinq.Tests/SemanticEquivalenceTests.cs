@@ -37,7 +37,10 @@ namespace SqlToLinq.Tests {
 
             // String functions not supported by SQLite
             180, 191, 193, 194, 195, 196, 197, 212, 217, 218,
-            219, 220, 221, 222, 223, 224, 225, 226, 230, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244
+            219, 220, 221, 222, 223, 224, 225, 226, 230, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244,
+
+            // DELETE statements 
+            245, 246, 247, 248, 249, 250,
         };
 
         private SqliteConnection _connection;

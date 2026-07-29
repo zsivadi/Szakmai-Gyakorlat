@@ -1450,5 +1450,41 @@
 		"Desc": "EXP függvény — e hatványa.",
 		"SqlInput": "SELECT Name, EXP(1) AS E FROM Users WHERE Name = 'Bob'",
 		"ExpectedLinq": "db.Users.Where(x => x.Name == \"Bob\").Select(x => new { x.Name, E = Math.Exp((double)(1)) }).ToList()"
+	},
+	{
+		"Id": 245,
+		"Desc": "DELETE WHERE feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Age < 18",
+		"ExpectedLinq": "db.Users.Where(x => x.Age < 18).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 246,
+		"Desc": "DELETE WHERE nélkül — teljes tábla törlése.",
+		"SqlInput": "DELETE FROM Users",
+		"ExpectedLinq": "db.Users.ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 247,
+		"Desc": "DELETE LIKE feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Name LIKE 'B%'",
+		"ExpectedLinq": "db.Users.Where(x => EF.Functions.Like(x.Name, \"B%\")).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 248,
+		"Desc": "DELETE AND feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Age > 20 AND Role = 'User'",
+		"ExpectedLinq": "db.Users.Where(x => x.Age > 20 && x.Role == \"User\").ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 249,
+		"Desc": "DELETE IN listával.",
+		"SqlInput": "DELETE FROM Users WHERE Role IN ('Admin', 'Moderator')",
+		"ExpectedLinq": "db.Users.Where(x => new string[] { \"Admin\", \"Moderator\" }.Contains(x.Role)).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 250,
+		"Desc": "DELETE IS NULL feltétellel.",
+		"SqlInput": "DELETE FROM Orders WHERE Owner IS NULL",
+		"ExpectedLinq": "db.Orders.Where(x => x.Owner == null).ExecuteDeleteAsync()"
 	}
 ]
