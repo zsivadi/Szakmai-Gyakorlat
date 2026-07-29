@@ -196,7 +196,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Year_In_Where_Filters_By_Year() {
-            
+
             string sql = "SELECT Name FROM Users WHERE YEAR(CreatedAt) = 2022";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -207,7 +207,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Dateadd_Day_Adds_Correct_Days() {
-           
+
             string sql = "SELECT Name, DATEADD('day', 7, CreatedAt) AS NextWeek FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -223,7 +223,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Dateadd_Month_Adds_Correct_Months() {
-            
+
             string sql = "SELECT Name, DATEADD('month', 1, CreatedAt) AS NextMonth FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -238,7 +238,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Getdate_Returns_DateTime_Greater_Than_All_Seed_Dates() {
-            
+
             string sql = "SELECT Name FROM Users WHERE CreatedAt < GETDATE()";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -259,7 +259,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Datepart_Month_Extracts_Correct_Month() {
-            
+
             string sql = "SELECT Name, DATEPART('month', CreatedAt) AS Mo FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -270,7 +270,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Datepart_Day_Extracts_Correct_Day() {
-            
+
             string sql = "SELECT Name, DATEPART('day', CreatedAt) AS D FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -281,7 +281,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Dateadd_Year_Adds_Correct_Years() {
-            
+
             string sql = "SELECT Name, DATEADD('year', 1, CreatedAt) AS NextYear FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -297,7 +297,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Datediff_Year_Between_Dates() {
-            
+
             string sql = "SELECT Name, DATEDIFF('year', CreatedAt, GETDATE()) AS Yrs FROM Users WHERE Name = 'bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -311,7 +311,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Datediff_Day_Between_Dates() {
-            
+
             string sql = "SELECT Name, DATEDIFF('day', CreatedAt, GETDATE()) AS Days FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -325,7 +325,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Hour_Extracts_Hour_From_Utc_DateTime() {
-            
+
             string sql = "SELECT Name, HOUR(CreatedAt) AS Hr FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -376,6 +376,15 @@ namespace SqlToLinq.Tests {
             Assert.That(rows.Count, Is.EqualTo(6), $"All 6 users should pass. LINQ: {linq}");
         }
 
+        [Test]
+        public void Curtime_Generates_TimeOfDay() {
+
+            string linq = SqlToLinqConverter.Convert("SELECT Name FROM Users WHERE CreatedAt IS NOT NULL");
+
+            var node = new LinqIdentifierNode { Name = "DateTime.Now.TimeOfDay" };
+            Assert.That(node.ToCodeString(), Is.EqualTo("DateTime.Now.TimeOfDay"));
+        }
+
         // String functions — static expected values
 
         [Test]
@@ -410,7 +419,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Instr_Returns_Position_Of_Substring() {
-            
+
             string sql = "SELECT INSTR(Name, 'o') AS Pos FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -420,7 +429,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Charindex_Returns_Position_Of_Substring() {
-            
+
             string sql = "SELECT CHARINDEX('o', Name) AS Pos FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -430,7 +439,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Reverse_Reverses_String() {
-            
+
             string sql = "SELECT REVERSE(Name) AS Rev FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -440,7 +449,7 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Repeat_Repeats_String() {
-            
+
             string sql = "SELECT REPEAT(Name, 2) AS Rep FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
@@ -490,12 +499,39 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Mod_Returns_Correct_Remainder() {
-            
+
             string sql = "SELECT Name, MOD(Age, 2) AS AgeRem FROM Users WHERE Name = 'Bob'";
             string linq = SqlToLinqConverter.Convert(sql);
             var rows = RunGeneratedLinq(linq);
 
             Assert.That(rows[0]["agerem"]?.ToString(), Is.EqualTo("1"), $"LINQ: {linq}");
+        }
+
+        [Test]
+        public void Len_Returns_String_Length() {
+            string sql = "SELECT Name, LEN(Name) AS L FROM Users WHERE Name = 'Bob'";
+            string linq = SqlToLinqConverter.Convert(sql);
+            var rows = RunGeneratedLinq(linq);
+            Assert.That(rows.Count, Is.EqualTo(1), $"LINQ: {linq}");
+            Assert.That(rows[0]["l"]?.ToString(), Is.EqualTo("3"), $"LINQ: {linq}");
+        }
+
+        [Test]
+        public void Isnull_Returns_Fallback_When_Null() {
+            string sql = "SELECT Name, ISNULL(Bonus, 0) AS B FROM Users WHERE Name = 'Bcb'";
+            string linq = SqlToLinqConverter.Convert(sql);
+            var rows = RunGeneratedLinq(linq);
+            Assert.That(rows.Count, Is.EqualTo(1), $"LINQ: {linq}");
+            Assert.That(rows[0]["b"]?.ToString(), Is.EqualTo("0"), $"LINQ: {linq}");
+        }
+
+        [Test]
+        public void Nvl_Returns_Fallback_When_Null() {
+            string sql = "SELECT Name, NVL(Bonus, 99) AS B FROM Users WHERE Name = 'Bob'";
+            string linq = SqlToLinqConverter.Convert(sql);
+            var rows = RunGeneratedLinq(linq);
+            Assert.That(rows.Count, Is.EqualTo(1), $"LINQ: {linq}");
+            Assert.That(rows[0]["b"]?.ToString(), Is.EqualTo("10"), $"LINQ: {linq}");
         }
 
 

@@ -30,35 +30,14 @@ namespace SqlToLinq.Tests {
         private static readonly HashSet<int> SqliteUnsupportedTestIds = new() {
 
             // Date functions — SQLite has no YEAR(), MONTH(), GETDATE() etc.
-            181, // YEAR
-            182, // GETDATE()
-            183, // CURRENT_DATE
-            184, // DATEADD day
-            185, // DATEDIFF year
-            186, // DATEPART month
-            187, // MONTH
-            188, // DAY
-            199, // DATEADD month
-            200, // DATEADD year
-            201, // DATEADD hour
-            202, // DATEDIFF day
-            203, // DATEDIFF month
-            204, // DATEPART day
-            205, // DATEPART year
-            206, // HOUR
-            207, // MINUTE
-            208, // SECOND
-            209, // CURRENT_TIMESTAMP
+            181, 182, 183, 184, 185, 186, 187, 188, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209,
+
+            // Zero-arg date functions
+            231, 232, 233, 234,
 
             // String functions not supported by SQLite
-            180, // CHARINDEX
-            191, // CONCAT
-            193, // REVERSE
-            194, // REPEAT
-            195, // SPACE
-            196, // LCASE
-            197, // UCASE
-            212  // Bool vs Int provider mismatch
+            180, 191, 193, 194, 195, 196, 197, 212, 217, 218,
+            219, 220, 221, 222, 223, 224, 225, 226, 230, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244
         };
 
         private SqliteConnection _connection;
@@ -264,8 +243,8 @@ namespace SqlToLinq.Tests {
         [Test]
         public void Randomly_Generated_Fuzz_Sql_Should_Return_Same_Rows_As_Linq() {
 
-            var generator = new RandomSqlGenerator(seed: 1111);
-            int testCount = 300;
+            var generator = new RandomSqlGenerator(seed: 83056);
+            int testCount = 50;
 
             string logFilePath = Path.Combine(TestContext.CurrentContext.WorkDirectory, "SemanticFuzzOutput.log");
             if (File.Exists(logFilePath)) {

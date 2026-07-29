@@ -108,10 +108,15 @@ namespace SqlToLinq.Tests {
                 string orderCol = hasJoin ? Pick(AllColumns()) : Pick(UnqualifiedColumns());
 
                 if (distinct && columns != "*") {
+
                     var selectCols = columns.Split(',')
                         .Select(c => c.Trim().Split(' ')[0])
-                        .Where(c => !c.StartsWith("CASE") && !c.Contains("(") && !c.Contains(")"))
+                        .Where(c => !c.StartsWith("CASE")
+                                    && !c.Contains("(")
+                                    && !c.Contains(")")
+                                    && !c.All(char.IsDigit))  
                         .ToArray();
+
                     if (selectCols.Length > 0) orderCol = Pick(selectCols);
                 }
 

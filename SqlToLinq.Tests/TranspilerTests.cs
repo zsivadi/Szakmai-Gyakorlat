@@ -54,14 +54,14 @@ namespace SqlToLinq.Tests {
 
         [Test]
         public void Lexer_Error_Should_Throw_SqlSyntaxException() {
-            
+
             Assert.Throws<SqlSyntaxException>(() =>
                 SqlToLinqConverter.Convert("SELECT @ FROM Users"));
         }
 
         [Test]
         public void Parser_Error_Should_Throw_SqlSyntaxException() {
-            
+
             Assert.Throws<SqlSyntaxException>(() =>
                 SqlToLinqConverter.Convert("SELECT FROM FROM"));
         }
@@ -69,7 +69,7 @@ namespace SqlToLinq.Tests {
         [Test]
         public void Unsupported_Statement_Type_Should_Throw_NotSupportedException() {
 
-            Assert.Throws<NotSupportedException>(() =>
+            Assert.Throws<SqlSyntaxException>(() =>
                 SqlToLinqConverter.Convert("UPDATE Users SET Name = 'Admin' WHERE Id = 1"));
         }
 
@@ -119,6 +119,158 @@ namespace SqlToLinq.Tests {
 
             Assert.Throws<NotSupportedException>(() =>
                 SqlToLinqConverter.Convert("SELECT DISTINCT CASE WHEN Age > 18 THEN 1 ELSE 0 END FROM Users ORDER BY Age DESC"));
+        }
+
+        [Test]
+        public void Unknown_Function_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT FOOBAR(Name) AS X FROM Users"));
+        }
+
+        [Test]
+        public void Dateadd_Unsupported_Part_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT DATEADD('week', 1, CreatedAt) AS W FROM Users"));
+        }
+
+        [Test]
+        public void Datediff_Unsupported_Part_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT DATEDIFF('week', CreatedAt, GETDATE()) AS W FROM Users"));
+        }
+
+        [Test]
+        public void Datepart_Unsupported_Part_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT DATEPART('week', CreatedAt) AS W FROM Users"));
+        }
+
+        [Test]
+        public void Left_Function_Should_Throw_SqlSyntaxException() {
+            Assert.Throws<SqlSyntaxException>(() =>
+                SqlToLinqConverter.Convert("SELECT LEFT(Name, 2) AS L FROM Users"));
+        }
+
+        [Test]
+        public void Right_Function_Should_Throw_SqlSyntaxException() {
+            Assert.Throws<SqlSyntaxException>(() =>
+                SqlToLinqConverter.Convert("SELECT RIGHT(Name, 2) AS R FROM Users"));
+        }
+
+        [Test]
+        public void Count_Distinct_Outside_Group_By_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT COUNT(DISTINCT Name) AS C FROM Users"));
+        }
+
+        [Test]
+        public void Unknown_Zero_Arg_Function_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT UNKNOWN_FUNC() AS X FROM Users"));
+        }
+
+        [Test]
+        public void Substring_With_Wrong_Arg_Count_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT SUBSTRING(Name, 1) AS S FROM Users"));
+        }
+
+        [Test]
+        public void Replace_With_Wrong_Arg_Count_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT REPLACE(Name, 'a') AS R FROM Users"));
+        }
+
+        [Test]
+        public void Stuff_With_Wrong_Arg_Count_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT STUFF(Name, 1, 2) AS S FROM Users"));
+        }
+
+        [Test]
+        public void Coalesce_With_Wrong_Arg_Count_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert("SELECT COALESCE(Name, Role, 'x') AS C FROM Users"));
+        }
+
+        [Test]
+        public void Left_Join_Non_Equality_On_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert(
+                    "SELECT u.Name FROM Users u LEFT JOIN Orders o ON u.Id > o.Owner"));
+        }
+
+        [Test]
+        public void Right_Join_Non_Equality_On_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert(
+                    "SELECT u.Name FROM Users u RIGHT JOIN Orders o ON u.Id > o.Owner"));
+        }
+
+        [Test]
+        public void Join_On_Unknown_Alias_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert(
+                    "SELECT u.Name FROM Users u JOIN Orders o ON x.Id = o.Owner"));
+        }
+
+        [Test]
+        public void Right_Join_On_Wrong_Aliases_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert(
+                    "SELECT u.Name FROM Users u RIGHT JOIN Orders o ON u.Id = u.Id"));
+        }
+
+        [Test]
+        public void Sum_Distinct_Should_Throw_NotSupportedException() {
+            Assert.Throws<NotSupportedException>(() =>
+                SqlToLinqConverter.Convert(
+                    "SELECT SUM(DISTINCT Age) AS S FROM Users GROUP BY Role"));
+        }
+
+        [Test]
+        public void LinqStringFunctionNode_Unknown_Function_Throws_NotSupportedException() {
+
+            var node = new LinqStringFunctionNode {
+                FunctionName = "UNKNOWNFUNC",
+                Arguments = new List<LinqNode> { new LinqConstantNode { Value = "x" } }
+            };
+
+            Assert.Throws<NotSupportedException>(() => node.ToCodeString());
+        }
+    }
+
+    [TestFixture]
+    public class PascalCaseTests {
+
+        [Test]
+        public void Snake_Case_Table_Name_Converted_To_PascalCase() {
+            string linq = SqlToLinqConverter.Convert("SELECT * FROM user_orders");
+            Assert.That(linq, Does.Contain("db.UserOrders"));
+        }
+
+        [Test]
+        public void Mixed_Case_Column_Name_Preserved_With_Upper_First() {
+            string linq = SqlToLinqConverter.Convert("SELECT userName FROM Users");
+            Assert.That(linq, Does.Contain("x.UserName"));
+        }
+
+        [Test]
+        public void All_Caps_Name_Converted_To_Pascal_Case() {
+            string linq = SqlToLinqConverter.Convert("SELECT * FROM USERS");
+            Assert.That(linq, Does.Contain("db.Users"));
+        }
+
+        [Test]
+        public void ToPascalCase_AllUnderscores_ReturnsOriginalInput() {
+            string linq = SqlToLinqConverter.Convert("SELECT a_b FROM Users");
+            Assert.That(linq, Does.Contain("AB"));
+        }
+
+        [Test]
+        public void All_Underscores_Table_Name_Returns_Original_Input() {
+            string linq = SqlToLinqConverter.Convert("SELECT * FROM __");
+            Assert.That(linq, Does.Contain("db.__"));
         }
     }
 }
