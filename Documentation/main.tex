@@ -24,11 +24,10 @@
   style=tango,
 }
 
-\renewcommand{\listingscaption}{Ábra}
+\renewcommand{\listingscaption}{Kódpélda}
 \makeatletter
 \AtBeginDocument{%
-  \counterwithin{listing}{section}%
-  \renewcommand{\thelisting}{\Roman{listing}}%
+  \renewcommand{\thelisting}{\arabic{listing}}%
 }
 \makeatother
  
@@ -125,6 +124,8 @@ Nagyobb méretű legacy rendszerek modernizálása során gyakori feladat a töb
 
 Ezen karbantartási és migrációs problémák kiküszöbölésére hatékony megoldást jelenthet egy transpiler megtervezése és alkalmazása. Egy ilyen eszköz létrehozása azonban specifikus technológiai kihívásokat is tartogat. Mivel a két nyelv nem feleltethető meg egymásnak egy az egyben, a fordítónak intelligens módon kell áthidalnia a hiányosságokat. Nem minden SQL utasításnak vagy beépített adatbázis függvénynek van közvetlen C\# megfelelője. Például az SQL \texttt{LIKE} operátorának és helyettesítő karaktereinek transzpilálása komplex reguláris kifejezések (regexek) generálását igényeli. Továbbá a fordító által előállított LINQ kódnak nem csupán szintaktikailag kell helyesnek lennie, hanem illeszkednie kell az Entity Framework kifejezésfa (Expression Tree) kiértékelési mechanizmusaihoz is, elkerülve a nem támogatott szerveroldali fordításokat és a teljesítményt rontó kliensoldali adatfeldolgozást \cite{nmorph2023}.
 
+A bemutatott fordító célja az SQL:1999 szabvány által definiált lekérdezésnyelv egy jól meghatározott részhalmazának lefordítása Entity Framework Core 8.0 kompatibilis LINQ metódusszintaxisra. A bemeneti nyelv az SQL:1999-es szabványt követi, a generált kimenet pedig olyan C\# kód, amely EF Core 8.0 alatt, bármely adatbázis-provider esetén szerver oldalon fordítható SQL-re.
+
 \section{Szakirodalmi áttekintés}
 
 A fordító több egymástól eltérő, de szorosan összefüggő kutatási területre támaszkodik: a fordítóprogram-elméletre és az ehhez kapcsolódó eszközökre, az objektum-relációs leképezés problémakörére, a LINQ és az Entity Framework Core belső működésére, valamint a transpilerek ipari alkalmazásaira.
@@ -165,66 +166,97 @@ Borne \cite{borne2021transpiler} esettanulmánya egy valódi ipari transpiler me
 
 \section{Megvalósítás}
 
-\begin{longtable}{|l|p{0.42\textwidth}|p{0.2\textwidth}|}
-\hline
-\textbf{SQL} & \textbf{Generált LINQ} & \textbf{Megjegyzés} \\
-\hline
-\endfirsthead
-\multicolumn{3}{l}{\small\textit{(folytatás az előző oldalról)}} \\
-\hline
-\textbf{SQL} & \textbf{Generált LINQ} & \textbf{Megjegyzés} \\
-\hline
-\endhead
-\hline
-\multicolumn{3}{r}{\small\textit{(folytatás a következő oldalon)}} \\
-\endfoot
-\hline
-\endlastfoot
-\multicolumn{3}{|l|}{\textit{Záradékok}} \\
-\hline
-\texttt{SELECT *}                & \texttt{.ToList()}                                  & Vetítés nélkül \\
-\texttt{SELECT col1, col2}       & \texttt{.Select(x => new \{ col1, col2 \})}         & Anonim típus \\
-\texttt{SELECT DISTINCT}         & \texttt{.Select(...).Distinct()}                    & Vetítés után \\
-\texttt{WHERE cond}              & \texttt{.Where(x => cond)}                          & \\
-\texttt{GROUP BY col}            & \texttt{.GroupBy(x => x.Col)}                       & \\
-\texttt{HAVING cond}             & \texttt{.Where(g => cond)}                          & GroupBy után \\
-\texttt{ORDER BY col ASC}        & \texttt{.OrderBy(x => x.Col)}                       & \\
-\texttt{ORDER BY col DESC}       & \texttt{.OrderByDescending(x => x.Col)}             & \\
-\texttt{ORDER BY c1, c2}         & \texttt{.OrderBy(...).ThenBy(...)}                  & \\
-\texttt{LIMIT n}                 & \texttt{.Take(n)}                                   & OrderBy után \\
-\texttt{OFFSET n}                & \texttt{.Skip(n)}                                   & Take előtt \\
-\hline
-\multicolumn{3}{|l|}{\textit{Összehasonlító operátorok}} \\
-\hline
-\texttt{=} / \texttt{<>}        & \texttt{==} / \texttt{!=}                           & \\
-\texttt{>} / \texttt{>=}        & \texttt{>} / \texttt{>=}                            &  \\
-\texttt{<} / \texttt{<=}        & \texttt{<} / \texttt{<=}                            &  \\
-\hline
-\multicolumn{3}{|l|}{\textit{Logikai operátorok}} \\
-\hline
-\texttt{AND} / \texttt{OR}      & \texttt{\&\&} / \texttt{||}                         & \\
-\texttt{NOT felt}               & \texttt{!(felt)}                                    & \\
-\hline
-\multicolumn{3}{|l|}{\textit{Feltételek}} \\
-\hline
-\texttt{LIKE 'A\%'}             & \texttt{Regex.IsMatch(col, "(?i)\^{}A.*\$")}        & Kis-nagybetű független \\
-\texttt{NOT LIKE 'A\%'}         & \texttt{!Regex.IsMatch(col, "(?i)\^{}A.*\$")}       & \\
-\texttt{BETWEEN a AND b}        & \texttt{col >= a \&\& col <= b}                     & Csak numerikus \\
-\texttt{NOT BETWEEN a AND b}    & \texttt{!(col >= a \&\& col <= b)}                  & \\
-\texttt{IN (v1, v2)}            & \texttt{new[]\{v1,v2\}.Contains(col)}               & \\
-\texttt{NOT IN (v1, v2)}        & \texttt{!new[]\{v1,v2\}.Contains(col)}              & \\
-\texttt{IS NULL}                & \texttt{col == null}                                & \\
-\texttt{IS NOT NULL}            & \texttt{col != null}                                & \\
-\hline
-\multicolumn{3}{|l|}{\textit{Kifejezések}} \\
-\hline
-\texttt{+} / \texttt{-} / \texttt{*} / \texttt{/} & \texttt{+} / \texttt{-} / \texttt{*} / \texttt{/} & \\
-\texttt{COUNT(*)}               & \texttt{g.Count()}                                  & \\
-\texttt{SUM(col)}               & \texttt{g.Sum(x => x.Col)}                          & \\
-\texttt{MIN(col) / MAX(col)}    & \texttt{g.Min(x => x.Col) / g.Max(x => x.Col)}     & \\
-\texttt{CASE WHEN f THEN r}     & \texttt{(f ? r : e)}                                & Beágyazott ternáris \\
-\texttt{col AS alias}           & \texttt{alias = x.Col}                              & Anonim típusban \\
-\end{longtable}
+\subsection{A tervezési döntések háttere}
+
+A fordító tervezésekor az első és legfontosabb kérdés az volt, hogy milyen szintű absztrakcióban érdemes gondolkodni. Az egyik szélsőséges megközelítés a közvetlen szöveges transzformáció lett volna, ahol a bemeneti SQL string reguláris kifejezések és szövegcserék útján alakul át LINQ kóddá. Ez a megközelítés egyszerűnek tűnik kis méretű, szabályos bemeneteken, de az SQL nyelv kontextusfüggő természete miatt gyorsan kezelhetetlenné válik. Egy feltétel például másképpen viselkedik \texttt{WHERE} záradékban, \texttt{HAVING} záradékban, allekérdezés belsejében vagy \texttt{CASE WHEN} kifejezésben, és ezeket a különbségeket reguláris kifejezéssel nem lehet megbízhatóan felismerni.
+
+A másik véglet egy teljes fordítóprogram-lánc lett volna saját lexerrel, parserrel és szemantikai elemzővel. Ez ugyan a lehető legrugalmasabb megoldást adta volna, de az implementáció terhe aránytalanul nagy lett volna a projekt céljaihoz képest, és a karbantarthatóságot is megnehezítette volna.
+
+A kettő között egy háromrétegű architektúra bizonyult a legjobb megoldásnak. Az első réteg egy ANTLR4-gyel generált parser, amely az SQL szöveget parse fává alakítja. A második réteg egy saját absztrakt szintaxisfa, amely a LINQ-specifikus struktúrákat reprezentálja. A harmadik réteg a tényleges kódgenerátor, amely ebből az absztrakt reprezentációból állítja elő a végleges C\# forráskódot. Ez a szétválasztás több előnnyel is jár. A grammatika és a kódgenerálás egymástól függetlenül fejleszthető és tesztelhető. Új SQL konstrukciók bevezetésekor elegendő egy új grammar szabályt, egy új AST-csomópontot és egy új visitor metódust hozzáadni, a rendszer többi része változatlan marad.
+
+\subsection{A grammatika és a parser}
+
+A parser előállítására az ANTLR4 parser generátor mellett döntöttem. Az ANTLR4 kontextusfüggetlen grammatikából automatikusan generál lexert és parsert, amelyek a bemeneti szöveget parse fává alakítják. A generált kód C\# nyelvű, így közvetlenül integrálható a .NET alapú projektbe.
+
+Az SQL grammatika megírása során fontos szempont volt, hogy a nyelvtan csak azt fedje le, amit a fordító valóban képes kezelni. Egy teljes SQL:1999-es grammatika hatalmas, és sok olyan konstrukciót tartalmaz amelynek LINQ-ban nincs közvetlen megfelelője. A projekt grammatikája ezért szándékosan az SQL nyelv egy szűkebb, de teljes egészében támogatott részhalmazát fedi le, amelynek minden szabályához rendelkezésre áll a megfelelő LINQ-kódgenerálási logika.
+
+A lexer a bemeneti karakterfolyamból tokeneket állít elő. A kulcsszavak esetében figyelmen kívül hagyja a kis- és nagybetű különbséget, így a \texttt{SELECT}, \texttt{select} és \texttt{Select} alakok egyenértékűek. Az azonosítók felismerése után a fordító egy \texttt{ToPascalCase} konverziót végez, amely az SQL konvencióinak megfelelő \texttt{snake\_case} vagy csupa nagybetűs neveket C\#-ban szokásos PascalCase formára hozza. Ez azt jelenti, hogy a \texttt{user\_name} oszlopnévből automatikusan \texttt{UserName}, a \texttt{USERS} táblanévből pedig \texttt{Users} lesz.
+
+A nyelvtan felépítése a legáltalánosabb szabályoktól halad a specifikusak felé. A legfelső szintű \texttt{query} szabály egy \texttt{selectQuery}-t vár, amelyet egy opcionális pontosvessző követhet. A \texttt{selectQuery} lehetőséget ad halmazműveletek láncolására (\texttt{UNION}, \texttt{INTERSECT}, \texttt{EXCEPT}), míg maga a \texttt{selectStmt} bontja ki az egyes lekérdezések szerkezetét. A \texttt{condition} szabály rekurzív, ami lehetővé teszi az \texttt{AND}, \texttt{OR} és \texttt{NOT} operátorok tetszőleges mélységű egymásba ágyazását. Az \texttt{expr} szabály szintén rekurzív, kezelve az aritmetikai kifejezéseket és a allekérdezéseket. Az ANTLR4 Adaptive~LL(*) algoritmusának köszönhetően ezek a rekurzív szabályok kezelhetők anélkül, hogy kézzel kellene foglalkozni a kétértelműségekkel.
+
+A többargumentumú függvényhívások kezelésére a grammatika egy variadikus szabályt alkalmaz. Az első változatban a két-, három- és négyargumentumú esetekre külön-külön szabályok léteztek, amit egy általánosabb \texttt{funcCallExpr} szabály váltott fel, amely \texttt{expr (COMMA expr)+} alakban írható le. Ez a változtatás egyszerűsítette a nyelvtant és lehetővé tette, hogy az argumentumszám-érvényesítés a visitor rétegbe kerüljön, ahol értelmes hibaüzenettel jelezhető, ha egy függvényt helytelen számú paraméterrel hívnak meg.
+
+\subsection{Az absztrakt szintaxisfa}
+
+Az ANTLR4 által generált parse fa az SQL szintaxis közvetlen tükörképe, mivel minden grammatikai szabályhoz egy-egy csomópont tartozik. Ez a reprezentáció a kódgenerálás szempontjából túlságosan alacsony szintű, mert olyan részleteket tartalmaz amelyek a LINQ kód előállításához irrelevánsak, például a zárójeleket, a vesszőket és az SQL kulcsszavakat. Emiatt a fordító egy saját absztrakt szintaxisfát épít fel, amelynek csomópontjai már a LINQ struktúráknak megfelelő fogalmakat reprezentálnak.
+
+A csomóponthierarchia alapja az absztrakt \texttt{LinqNode} osztály, amelynek egyetlen absztrakt metódusa a \texttt{ToCodeString()}, ez felelős a C\# kód előállításáért. Minden konkrét csomóponttípus ebből öröklődik és saját implementációt ad ennek a metódusnak. A \texttt{LinqQueryNode} az egész lekérdezést reprezentálja egy forrástábla-névvel és egy láncolt metódusok listájával. A \texttt{LinqMethodCallNode} egyetlen LINQ metódushívást ír le a metódus nevével és argumentumaival. A \texttt{LinqLambdaNode} egy lambda kifejezést tartalmaz paraméternévvel és törzzsel. A \texttt{LinqAnonymousObjectNode} egy névtelen objektumot reprezentál a \texttt{Select} vetítések számára. A \texttt{LinqConstantNode} literális értékeket tárol, a \texttt{LinqIdentifierNode} pedig azonosítókat és oszlophivatkozásokat.
+
+Ez az elrendezés teszi lehetővé hogy a kódgenerálás egyszerűen a csomópont-fa bejárásával valósuljon meg. Egy lekérdezés generálásához elegendő a gyökér \texttt{LinqQueryNode} \texttt{ToCodeString()} metódusát meghívni, amely rekurzívan meghívja a gyermek csomópontok ugyanezen metódusát, és az eredményeket összefűzi.
+
+A LINQ kód egy lánc alakú metódushívás-sorozat, amelynek sorrendje kötött. A fordítónak ezt a sorrendet be kell tartania. Az AST-alapú megközelítés ezt természetesen kezeli, mivel a \texttt{LinqQueryNode} a metódusokat egy rendezett listában tárolja, és a visitor réteg gondoskodik arról, hogy ezek a helyes sorrendben kerüljenek bele.
+
+\subsection{A visitor és a scope kezelés}
+
+A parse fa bejárására az ANTLR4 visitor mintáját alkalmazom. Az ANTLR4 a grammatikából automatikusan generálja az alap visitor interfészt, amelyet a \texttt{SqlVisitor} osztály implementál. Minden grammatikai szabályhoz egy \texttt{Visit...} metódus tartozik, amely a megfelelő \texttt{LinqNode} leszármazottat építi fel és adja vissza.
+
+A visitor legösszetettebb része a scope kezelés, amelyre az SQL allekérdezések és korrelált hivatkozások miatt van szükség. Amikor egy belső \texttt{SELECT} lekérdezés hivatkozik a külső lekérdezés egy táblájára vagy aliasára, a fordítónak el kell döntenie, hogy az adott azonosítót melyik lambda paraméterrel kell prefixelni. Erre a célra az \texttt{\_outerScopes} nevű verem szolgál, amelybe minden \texttt{SELECT} feldolgozásának kezdetén bekerül az aktuális tábla-alias leképezés és az aktuális lambda paraméter neve. Amikor a belső lekérdezés egy azonosítót nem talál meg a saját scope-jában, végigmegy a veremen és megkeresi azt a külső scope-ban, majd az ott tárolt lambda paramétert használja prefixként.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// Korrelált EXISTS allekérdezés generálása
+// SQL: SELECT Name FROM Users u WHERE EXISTS 
+//        (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)
+// Generált LINQ:
+db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any())
+        .Select(x => new { x.Name })
+        .ToList()
+\end{minted}
+\caption{Korrelált allekérdezés scope kezelése}
+\end{listing}
+
+A lambda paraméter nevének nyomon követése nem triviális. Az egyszerű, alias nélküli lekérdezésekben a lambda paraméter mindig \texttt{x}. Ha azonban a lekérdezésben explicit SQL alias szerepel, például \texttt{FROM Orders o}, a belső lambda paraméter neve az alias lesz, tehát \texttt{o}. Ez biztosítja, hogy a generált kód olvasható maradjon, és a korrelált hivatkozások egyértelműen azonosíthatóak legyenek a generált LINQ-ban.
+
+A \texttt{GROUP BY} kontextus kezelése szintén különleges figyelmet igényel. A csoportosítás után a LINQ \texttt{Select} metódus lambda paraméterként a \texttt{g} csoportváltozót kapja, az oszlophivatkozások pedig \texttt{g.Key} vagy \texttt{g.First\-OrDefault().Oszlop} alakot öltenek. A visitor nyilvántartja, hogy éppen \texttt{GROUP BY} kontextusban dolgozik-e, és ennek megfelelően módosítja a generált kifejezéseket. Egy belső allekérdezés látogatásakor a kontextus flag-ek mentésre kerülnek, és a belső lekérdezés feldolgozása után visszaállítódnak, hogy a külső lekérdezés kontextusa ne sérüljön.
+
+A kód olvashatóságának és karbantarthatóságának javítása érdekében a fejlesztés során több ismétlődő minta kiszervezésre került újrafelhasználható segédmetódusokba. A \texttt{BuildWhereMethod} metódus elvégzi a \texttt{\_inWhereClause} flag beállítását, a feltétel látogatását és a \texttt{LinqMethodCallNode} összerakását. Hasonlóan, a \texttt{BuildOrderByMethods} az \texttt{ORDER BY} záradék feldolgozását végzi, a \texttt{SetupTableScope} pedig a tábla-alias leképezés és a scope verem feltöltését. Ezek a segédmetódusok egységes belépési pontot biztosítanak, és lehetővé teszik, hogy a \texttt{DELETE} és az \texttt{UPDATE} utasítások is ugyanazokat a WHERE és ORDER BY generálási logikákat használják, amelyek a \texttt{SELECT} esetén implementálva lettek.
+
+\subsection{Kódgenerálás}
+
+A kódgenerálás a visitor által felépített AST-csomópontok \texttt{ToCodeString()} metódusainak rekurzív meghívásával valósul meg. A folyamat kiindulópontja mindig a gyökér \texttt{LinqQueryNode}, amelynek \texttt{ToCodeString()} metódusa a forrástábla nevével kezdi az eredményt (\texttt{db.Tabla}), majd sorban hozzáfűzi a \texttt{Methods} lista elemeinek string reprezentációját.
+
+A többoszlopos \texttt{SELECT} esetén az \texttt{LinqAnonymousObjectNode} generál névtelen C\# objektumot. Ha az oszlop neve megegyezik a forrásoszlop nevével, egyszerű shorthand-et alkalmaz (\texttt{x.Nev}), különben explicit hozzárendelést (\texttt{Alias = x.Nev}). A \texttt{SELECT *} speciális eset, ahol nem keletkezik \texttt{Select} metódushívás, csak a \texttt{ToList()} zárja a láncot.
+
+Az allekérdezések generálása során fontos különbséget tenni a skaláris és a kollekcióalapú allekérdezések között. Az \texttt{IN (SELECT ...)} esetén a belső lekérdezés skaláris projekciót kap, és az összehasonlítás \texttt{Any()} metódussal történik, amely típusbiztos és nullable típusokat is helyesen kezel. Az \texttt{EXISTS} esetén a belső lekérdezés vetítése irreleváns, ezért a fordító a \texttt{ToCodeStringUpToSelect()} segédmetódust hívja, amely a lánc \texttt{Select} metódusa elé áll meg, és a kapott lekérdezésen az \texttt{Any()} kerül meghívásra. A skaláris allekérdezések, mint például \texttt{(SELECT MAX(Age) FROM Users)} esetén a fordító ellenőrzi, hogy a belső lekérdezés már önmagában skaláris eredményt ad-e vissza (aggregátum hívás), és ennek megfelelően dönti el, hogy szükséges-e a \texttt{FirstOrDefault()} hozzáfűzése.
+
+A \texttt{CASE WHEN} kifejezések beágyazott ternáris operátorokká alakulnak. Minden \texttt{WHEN} ágból egy \texttt{? :} kifejezés keletkezik, amelyek egymásba ágyazódnak, az \texttt{ELSE} ág adja a legbelső \texttt{false} értéket. Ha nincs \texttt{ELSE} ág, a végső értékként \texttt{null} keletkezik, ami visszatükrözi az SQL szemantikáját.
+
+A függvényleképezés a \texttt{LinqStringFunctionNode} osztályban egy \texttt{switch} kifejezéssel valósul meg. A matematikai függvények a \texttt{Math} osztály statikus metódusaira képződnek le, a stringfüggvények a \texttt{string} típus metódusaira, a dátumfüggvények pedig a \texttt{DateTime} struktúra property-jeire és metódusaira. Az ismeretlen függvénynevek esetén a \texttt{switch} alapértelmezett ága \texttt{NotSupportedException}-t dob, amely a fordítási folyamat során derül ki, nem futásidőben.
+
+\subsection{Főbb kihívások}
+
+A fejlesztés során több olyan pont adódott, ahol az első megközelítés tévesnek bizonyult és gondos átgondolást igényelt.
+
+Az egyik ilyen kihívás a \texttt{LIKE} operátor kezelése volt. Az első implementáció reguláris kifejezésre fordította a \texttt{LIKE} mintákat: a \texttt{B\%} mintából \texttt{(?i)\^{}B.*\$} regex lett, amelyet a generált kódban \texttt{Regex.IsMatch()} hívás használt fel. Ez C\# szinten helyesen működött, de az Entity Framework Core nem képes a \texttt{Regex.IsMatch()} metódust SQL-re fordítani, ezért a kiértékelés kliensoldalon, a memóriában zajlott. Ez teljesítménybeli szempontból elfogadhatatlan lett volna éles környezetben, különösen nagy adathalmazok esetén. A megoldás az \texttt{EF.Functions.Like()} metódus alkalmazása volt, amely az EF Core által közvetlenül SQL \texttt{LIKE} utasítássá fordítható, és minden adatbázis-provider támogatja.
+
+A korrelált allekérdezések scope kezelése szintén jelentős tervezési kihívást jelentett. A belső \texttt{SELECT} látogatásakor a visitor a saját scope-jában keresi az azonosítókat, és ha nem találja, át kell néznie a verem korábbi szintjeit. Az első implementáció egyszerűen elmentette az aktuális tábla-alias leképezést, majd a belső lekérdezés feldolgozása után visszaállította. Ez azonban nem volt elegendő, mert a belső lekérdezésen belüli lambda paraméter neve ütközhetett a külső lekérdezés lambda paraméterével, ami érvénytelen C\# kódot eredményezett. A megoldás egy pontosabb scope modell bevezetése volt, amelyben a verembe kerülő bejegyzés nemcsak a tábla-alias leképezést, hanem az aktuális lambda paraméter nevét is tárolja, és a belső látogatás idején ezeket az értékeket elmentjük és visszaállítjuk.
+
+A \texttt{GROUP BY} kontextusban megjelenő allekérdezések egy rejtettebb problémát okoztak. A \texttt{SELECT} lista látogatásakor a \texttt{GROUP BY} kontextus aktív, ami azt jelenti, hogy az oszlophivatkozások \texttt{g.FirstOrDefault().Oszlop} alakra kell alakuljanak. Amikor azonban a \texttt{SELECT} listában egy korrelált allekérdezés is szerepel, a belső lekérdezés látogatása felülírja az \texttt{\_inWhereClause}, \texttt{\_inAggregate} és \texttt{\_inOrderBy} flag-eket, amelyek a külső lekérdezés kontextusát rögzítik. A belső lekérdezés befejezése után ezek a flag-ek nullázott állapotban maradtak, így a \texttt{SELECT} lista maradék elemei elveszítették a \texttt{GROUP BY} kontextust, és hibás lambda kifejezések keletkeztek. A megoldás egy egységes \texttt{SaveClauseState} és \texttt{RestoreClauseState} mechanizmus bevezetése volt, amely minden \texttt{SELECT} belépésekor elmenti, és kilépésekor visszaállítja a teljes kontextus-állapotot.
+
+A nullable típusok kezelése az \texttt{IN (SELECT ...)} allekérdezéseknél szintén váratlan akadályt jelentett. Az első implementáció a belső lekérdezés által visszaadott szekvencián \texttt{Contains()} metódust hívott. Ez C\# szinten és SQLite esetén helyesen működött, de amikor az összehasonlítandó értékek egyike nullable típusú volt, az EF Core SQL Server és PostgreSQL providerein típusillesztési hiba keletkezett: az \texttt{IQueryable<int>} nem tartalmaz \texttt{Contains(int?)} metódust. A megoldás az \texttt{Any()} metódusra való áttérés volt, amely explicit egyenlőség-összehasonlítást végez, és típusbiztos módon kezeli a nullable típusokat minden provideren.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// Korábbi, típusillesztési hibát okozó megközelítés:
+(db.Users.Where(u => u.Role == "Admin").Select(u => u.Id))
+    .Contains(x.Owner)   // CS1929: IQueryable<int> nem tartalmazza ezt
+
+// Javított, provider-független megközelítés:
+db.Users.Where(u => u.Role == "Admin")
+        .Any(u => u.Id == x.Owner)
+\end{minted}
+\caption{Nullable típusillesztési probléma és megoldása}
+\end{listing}
 
 \section{Tesztelés} 
 

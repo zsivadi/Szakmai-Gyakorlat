@@ -21,7 +21,7 @@ updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
 
 insertStmt : INSERT INTO tableName ('(' idList ')')? VALUES '(' valueList ')' ;
 
-deleteStmt : DELETE FROM tableName (WHERE condition)? ;
+deleteStmt : DELETE FROM tableRef (WHERE condition)? ;
 
 fromClause : tableSource joinClause* ;
 
