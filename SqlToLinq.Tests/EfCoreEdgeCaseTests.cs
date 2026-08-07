@@ -543,7 +543,7 @@ namespace SqlToLinq.Tests {
             int deleted = RunGeneratedDelete(
                 SqlToLinqConverter.Convert("DELETE FROM Users WHERE Age < 18"));
 
-            Assert.That(deleted, Is.EqualTo(1));                              
+            Assert.That(deleted, Is.EqualTo(1));
             Assert.That(_db.Users.Count(), Is.EqualTo(5));
             Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.False);
         }
@@ -564,7 +564,7 @@ namespace SqlToLinq.Tests {
             int deleted = RunGeneratedDelete(
                 SqlToLinqConverter.Convert("DELETE FROM Users WHERE Age > 20 AND Role = 'User'"));
 
-            Assert.That(deleted, Is.EqualTo(2));                              
+            Assert.That(deleted, Is.EqualTo(2));
             Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.False);
             Assert.That(_db.Users.Count(), Is.EqualTo(4));
         }
@@ -575,7 +575,7 @@ namespace SqlToLinq.Tests {
             int deleted = RunGeneratedDelete(
                 SqlToLinqConverter.Convert("DELETE FROM Users WHERE Role IN ('Admin', 'Moderator')"));
 
-            Assert.That(deleted, Is.EqualTo(3));                              
+            Assert.That(deleted, Is.EqualTo(3));
             Assert.That(_db.Users.Any(u => u.Role == "Admin"), Is.False);
             Assert.That(_db.Users.Any(u => u.Role == "Moderator"), Is.False);
             Assert.That(_db.Users.Count(), Is.EqualTo(3));
@@ -587,7 +587,7 @@ namespace SqlToLinq.Tests {
             int deleted = RunGeneratedDelete(
                 SqlToLinqConverter.Convert("DELETE FROM Orders WHERE Owner IS NULL"));
 
-            Assert.That(deleted, Is.EqualTo(0));                              
+            Assert.That(deleted, Is.EqualTo(0));
             Assert.That(_db.Orders.Count(), Is.EqualTo(4));
         }
 
@@ -597,8 +597,121 @@ namespace SqlToLinq.Tests {
             int deleted = RunGeneratedDelete(
                 SqlToLinqConverter.Convert("DELETE FROM Users WHERE Name LIKE 'Ali%'"));
 
-            Assert.That(deleted, Is.EqualTo(1));                              
+            Assert.That(deleted, Is.EqualTo(1));
             Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(5));
+        }
+
+        [Test]
+        public void Delete_With_In_Subquery_Removes_Correct_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Orders WHERE Owner IN (SELECT Id FROM Users WHERE Role = 'Admin')"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Orders.Any(o => o.Item == "Laptop"), Is.False);
+            Assert.That(_db.Orders.Any(o => o.Item == "Mouse"), Is.False);
+            Assert.That(_db.Orders.Any(o => o.Item == "Monitor"), Is.False);
+            Assert.That(_db.Orders.Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Delete_With_Exists_Subquery_Removes_Users_With_Orders() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users u WHERE EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Users.Any(u => u.Name == "Bob"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Delete_With_Not_Exists_Subquery_Removes_Users_Without_Orders() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users u WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "B.b"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Delete_With_Between_Removes_Correct_Age_Range() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users WHERE Age BETWEEN 18 AND 25"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Users.Any(u => u.Name == "Bob"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "B.b"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
+
+            Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.True);  
+            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.True);  
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True); 
+        }
+
+        [Test]
+        public void Delete_With_Or_Condition_Removes_Both_Matching_Groups() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users WHERE Role = 'Admin' OR Role = 'Moderator'"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Users.Any(u => u.Name == "Bob"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Delete_With_Not_In_List_Removes_Non_Matching_Rows() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users WHERE Role NOT IN ('Admin', 'Moderator')"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Users.Any(u => u.Role == "User"), Is.False);
+            Assert.That(_db.Users.Count(), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Delete_With_Correlated_In_Subquery_Uses_Alias() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Orders o WHERE o.Owner IN (SELECT u.Id FROM Users u WHERE u.Role = 'Admin')"));
+
+            Assert.That(deleted, Is.EqualTo(3));
+            Assert.That(_db.Orders.Any(o => o.Item == "Laptop"), Is.False);
+            Assert.That(_db.Orders.Any(o => o.Item == "Mouse"), Is.False);
+            Assert.That(_db.Orders.Any(o => o.Item == "Monitor"), Is.False);
+            Assert.That(_db.Orders.Any(o => o.Item == "Keyboard"), Is.True); 
+        }
+
+        [Test]
+        public void Delete_With_Combined_And_Or_Subquery_Condition() {
+
+            int deleted = RunGeneratedDelete(
+                SqlToLinqConverter.Convert(
+                    "DELETE FROM Users u WHERE Age > 25 AND NOT EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)"));
+
+            Assert.That(deleted, Is.EqualTo(1));
+            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.False);
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True);  
+
             Assert.That(_db.Users.Count(), Is.EqualTo(5));
         }
 

@@ -963,31 +963,31 @@
 		"Id": 163,
 		"Desc": "IN (szubkérdezés) – alap eset.",
 		"SqlInput": "SELECT Name FROM Users WHERE Id IN (SELECT Owner FROM Orders)",
-		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Select(x => x.Owner)).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders).Any(o => o.Owner == x.Id)).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 164,
 		"Desc": "NOT IN (szubkérdezés).",
 		"SqlInput": "SELECT Name FROM Users WHERE Id NOT IN (SELECT Owner FROM Orders)",
-		"ExpectedLinq": "db.Users.Where(x => !((db.Orders.Select(x => x.Owner)).Contains(x.Id))).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !((db.Orders).Any(o => o.Owner == x.Id))).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 165,
 		"Desc": "IN (szubkérdezés) WHERE-rel a belső lekérdezésben.",
 		"SqlInput": "SELECT Name FROM Users WHERE Id IN (SELECT Owner FROM Orders WHERE Qty > 1)",
-		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(x => x.Qty > 1).Select(x => x.Owner)).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Qty > 1)).Any(o => o.Owner == x.Id)).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 166,
 		"Desc": "EXISTS szubkérdezés – alap eset.",
 		"SqlInput": "SELECT Name FROM Users WHERE EXISTS (SELECT 1 FROM Orders WHERE Owner = 1)",
-		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(x => x.Owner == 1)).Any()).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Owner == 1)).Any()).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 167,
 		"Desc": "NOT EXISTS szubkérdezés.",
 		"SqlInput": "SELECT Name FROM Users WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE Owner = 1)",
-		"ExpectedLinq": "db.Users.Where(x => !(db.Orders.Where(x => x.Owner == 1)).Any()).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => !(db.Orders.Where(o => o.Owner == 1)).Any()).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 168,
@@ -1005,19 +1005,19 @@
 		"Id": 170,
 		"Desc": "Korrelált IN (szubkérdezés) – külső alias hivatkozással.",
 		"SqlInput": "SELECT Name FROM Users u WHERE u.Id IN (SELECT Owner FROM Orders o WHERE o.Qty > 1)",
-		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Qty > 1).Select(o => o.Owner)).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Qty > 1)).Any(o => o.Owner == x.Id)).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 171,
 		"Desc": "Skaláris szubkérdezés SELECT-ben.",
 		"SqlInput": "SELECT Name, (SELECT MAX(Age) FROM Users) AS MaxAge FROM Users",
-		"ExpectedLinq": "db.Users.Select(x => new { x.Name, MaxAge = (db.Users.Max(x => x.Age)) }).ToList()"
+		"ExpectedLinq": "db.Users.Select(x => new { x.Name, MaxAge = (db.Users.Max(u => u.Age)) }).ToList()"
 	},
 	{
 		"Id": 172,
 		"Desc": "Skaláris szubkérdezés WHERE-ben összehasonlítással.",
 		"SqlInput": "SELECT Name FROM Users WHERE Age = (SELECT MAX(Age) FROM Users)",
-		"ExpectedLinq": "db.Users.Where(x => x.Age == (db.Users.Max(x => x.Age))).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => x.Age == (db.Users.Max(u => u.Age))).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 173,
@@ -1041,7 +1041,7 @@
 		"Id": 176,
 		"Desc": "Kétszintű egymásba ágyazott IN szubkérdezés.",
 		"SqlInput": "SELECT Name FROM Users WHERE Id IN (SELECT Owner FROM Orders WHERE Id IN (SELECT Parent FROM Products))",
-		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(x => (db.Products.Select(x => x.Parent)).Contains(x.Id)).Select(x => x.Owner)).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => (db.Products).Any(p => p.Parent == o.Id))).Any(o => o.Owner == x.Id)).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 177,
@@ -1395,7 +1395,7 @@
 		"Id": 235,
 		"Desc": "IN szubkérdezés inline nézettel (from-clause subquery).",
 		"SqlInput": "SELECT Name FROM Users WHERE Id IN (SELECT Id FROM (SELECT Id, Age FROM Users WHERE Age > 20) AS sub)",
-		"ExpectedLinq": "db.Users.Where(x => ((db.Users.Where(x => x.Age > 20).Select(x => new { x.Id, x.Age })).Select(x => new { x.Id })).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
+		"ExpectedLinq": "db.Users.Where(x => ((db.Users.Where(u => u.Age > 20).Select(u => new { u.Id, u.Age })).Select(x => new { x.Id })).Contains(x.Id)).Select(x => new { x.Name }).ToList()"
 	},
 	{
 		"Id": 236,
@@ -1486,5 +1486,65 @@
 		"Desc": "DELETE IS NULL feltétellel.",
 		"SqlInput": "DELETE FROM Orders WHERE Owner IS NULL",
 		"ExpectedLinq": "db.Orders.Where(x => x.Owner == null).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 251,
+		"Desc": "DELETE IN szubkérdezéssel.",
+		"SqlInput": "DELETE FROM Orders WHERE Owner IN (SELECT Id FROM Users WHERE Role = 'Admin')",
+		"ExpectedLinq": "db.Orders.Where(x => (db.Users.Where(u => u.Role == \"Admin\")).Any(u => u.Id == x.Owner)).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 252,
+		"Desc": "DELETE EXISTS korrelált szubkérdezéssel.",
+		"SqlInput": "DELETE FROM Users u WHERE EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)",
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any()).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 253,
+		"Desc": "DELETE NOT EXISTS korrelált szubkérdezéssel.",
+		"SqlInput": "DELETE FROM Users u WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)",
+		"ExpectedLinq": "db.Users.Where(x => !(db.Orders.Where(o => o.Owner == x.Id)).Any()).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 254,
+		"Desc": "DELETE BETWEEN feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Age BETWEEN 18 AND 25",
+		"ExpectedLinq": "db.Users.Where(x => x.Age >= 18 && x.Age <= 25).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 255,
+		"Desc": "DELETE OR feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Role = 'Admin' OR Role = 'Moderator'",
+		"ExpectedLinq": "db.Users.Where(x => x.Role == \"Admin\" || x.Role == \"Moderator\").ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 256,
+		"Desc": "DELETE IS NOT NULL feltétellel.",
+		"SqlInput": "DELETE FROM Users WHERE Bonus IS NOT NULL",
+		"ExpectedLinq": "db.Users.Where(x => x.Bonus != null).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 257,
+		"Desc": "DELETE NOT IN listával.",
+		"SqlInput": "DELETE FROM Users WHERE Role NOT IN ('Admin', 'Moderator')",
+		"ExpectedLinq": "db.Users.Where(x => !new string[] { \"Admin\", \"Moderator\" }.Contains(x.Role)).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 258,
+		"Desc": "DELETE IN korrelált szubkérdezéssel aliasokkal.",
+		"SqlInput": "DELETE FROM Orders o WHERE o.Owner IN (SELECT u.Id FROM Users u WHERE u.Role = 'Admin')",
+		"ExpectedLinq": "db.Orders.Where(x => (db.Users.Where(u => u.Role == \"Admin\")).Any(u => u.Id == x.Owner)).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 259,
+		"Desc": "DELETE EXISTS korrelált szubkérdezéssel aliasokkal.",
+		"SqlInput": "DELETE FROM Users u WHERE EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)",
+		"ExpectedLinq": "db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any()).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 260,
+		"Desc": "DELETE NOT EXISTS korrelált szubkérdezéssel aliasokkal.",
+		"SqlInput": "DELETE FROM Users u WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)",
+		"ExpectedLinq": "db.Users.Where(x => !(db.Orders.Where(o => o.Owner == x.Id)).Any()).ExecuteDeleteAsync()"
 	}
 ]
