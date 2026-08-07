@@ -126,6 +126,25 @@ namespace SqlToLinq.Core {
         public override string ToCodeString() {
 
             if (Subquery != null) {
+                if (Subquery.Inner is LinqQueryNode qn) {
+
+                    string baseQuery = qn.ToCodeStringUpToSelect();
+                    var selectMethod = qn.Methods.OfType<LinqMethodCallNode>()
+                        .FirstOrDefault(m => m.MethodName == "Select");
+
+                    if (selectMethod?.Arguments.Count == 1 &&
+                        selectMethod.Arguments[0] is LinqLambdaNode lambda) {
+
+                        string param = lambda.ParameterName;
+                        string colExpr = lambda.Body is LinqAnonymousObjectNode anon && anon.Properties.Count == 1
+                            ? anon.Properties[0].Expression.ToCodeString()
+                            : lambda.Body.ToCodeString();
+
+                        return $"({baseQuery}).Any({param} => {colExpr} == {Target.ToCodeString()})";
+                    }
+                }
+
+                // Fallback
 
                 string inner = ExtractScalarInnerQuery(Subquery.Inner);
                 return $"({inner}).Contains({Target.ToCodeString()})";
