@@ -42,24 +42,20 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitDeleteStmt([NotNull] SqlParserParser.DeleteStmtContext context) {
 
-            string tableName = ToPascalCase(context.tableName().GetText());
-            string lambdaParam = "x";
-
-            _currentLambdaParam = lambdaParam;
-            _tableAliases = new Dictionary<string, string> { { lambdaParam, tableName } };
+            var (tableName, _) = SetupTableScope(context.tableRef());
 
             LinqNode whereCondition = null;
 
             if (context.condition() != null) {
-                _inWhereClause = true;
-                whereCondition = Visit(context.condition());
-                _inWhereClause = false;
+                whereCondition = VisitWhereCondition(context.condition());
             }
+
+            _outerScopes.Pop();
 
             return new LinqDeleteNode {
                 SourceTable = tableName,
                 WhereCondition = whereCondition,
-                LambdaParam = lambdaParam
+                LambdaParam = _currentLambdaParam
             };
         }
 
@@ -172,14 +168,9 @@ namespace SqlToLinq.Core {
             var savedTableAliases = _tableAliases;
             var savedHasJoin = _hasJoin;
             var savedLambdaParam = _currentLambdaParam;
+            var savedClauseState = SaveClauseState();
 
-            var savedInWhereClause = _inWhereClause;
-            var savedInAggregate = _inAggregate;
-            var savedInOrderBy = _inOrderBy;
-
-            _inWhereClause = false;
-            _inAggregate = false;
-            _inOrderBy = false;
+            ResetClauseState();
 
             _currentLambdaParam = "x";
 
@@ -217,6 +208,8 @@ namespace SqlToLinq.Core {
                 _selectAliases = savedSelectAliases;
                 _currentLambdaParam = savedLambdaParam;
 
+                RestoreClauseState(savedClauseState);
+
                 return BuildInlineViewQuery(context, viewQuery, baseAlias);
             }
 
@@ -229,7 +222,10 @@ namespace SqlToLinq.Core {
 
             bool hasExplicitAlias = baseRef.alias() != null;
             bool isNestedQuery = _outerScopes.Count > 0 && savedTableAliases.Count > 0;
-            _currentLambdaParam = (isNestedQuery && hasExplicitAlias) ? baseAlias : "x";
+
+            _currentLambdaParam = isNestedQuery
+                ? (hasExplicitAlias ? baseAlias : baseTable.Substring(0, 1).ToLower())
+                : "x";
 
             _tableAliases = new Dictionary<string, string>();
             _tableAliases[baseAlias] = baseTable;
@@ -251,22 +247,10 @@ namespace SqlToLinq.Core {
 
             BuildJoinChain(fromCtx, baseAlias, queryNode);
 
-            // WHERE 
+            // WHERE
 
             if (context.condition() != null) {
-
-                _inWhereClause = true;
-                var conditionNode = Visit(context.condition());
-                _inWhereClause = false;
-
-                var whereMethod = new LinqMethodCallNode { MethodName = "Where" };
-
-                whereMethod.Arguments.Add(new LinqLambdaNode {
-                    ParameterName = _currentLambdaParam,
-                    Body = conditionNode
-                });
-
-                queryNode.Methods.Add(whereMethod);
+                queryNode.Methods.Add(BuildWhereMethod(context.condition(), _currentLambdaParam));
             }
 
             // GROUP BY 
@@ -343,29 +327,8 @@ namespace SqlToLinq.Core {
             }
 
             if (!hasDistinct && context.orderClause() != null) {
-
-                var orderItems = context.orderClause().orderItem();
-
-                for (int i = 0; i < orderItems.Length; i++) {
-
-                    var item = orderItems[i];
-                    _inOrderBy = true;
-                    var itemNode = Visit(item.expr());
-                    _inOrderBy = false;
-                    bool isDesc = item.DESC() != null;
-
-                    string methodName = i == 0
-                        ? (isDesc ? "OrderByDescending" : "OrderBy")
-                        : (isDesc ? "ThenByDescending" : "ThenBy");
-
-                    var orderMethod = new LinqMethodCallNode { MethodName = methodName };
-
-                    orderMethod.Arguments.Add(new LinqLambdaNode {
-                        ParameterName = hasGroupBy ? "g" : "x",
-                        Body = itemNode
-                    });
-
-                    queryNode.Methods.Add(orderMethod);
+                foreach (var m in BuildOrderByMethods(context.orderClause(), hasGroupBy ? "g" : "x")) {
+                    queryNode.Methods.Add(m);
                 }
             }
 
@@ -387,7 +350,7 @@ namespace SqlToLinq.Core {
 
                 if (globalAggNode.Argument != null) {
                     aggMethod.Arguments.Add(new LinqLambdaNode {
-                        ParameterName = "x",
+                        ParameterName = _currentLambdaParam,
                         Body = globalAggNode.Argument
                     });
                 }
@@ -429,27 +392,8 @@ namespace SqlToLinq.Core {
                     queryNode.Methods.Add(new LinqMethodCallNode { MethodName = "Distinct" });
 
                     if (context.orderClause() != null) {
-
-                        var orderItems = context.orderClause().orderItem();
-
-                        for (int i = 0; i < orderItems.Length; i++) {
-
-                            var item = orderItems[i];
-                            var itemNode = Visit(item.expr());
-                            bool isDesc = item.DESC() != null;
-
-                            string methodName = i == 0
-                                ? (isDesc ? "OrderByDescending" : "OrderBy")
-                                : (isDesc ? "ThenByDescending" : "ThenBy");
-
-                            var orderMethod = new LinqMethodCallNode { MethodName = methodName };
-
-                            orderMethod.Arguments.Add(new LinqLambdaNode {
-                                ParameterName = "x",
-                                Body = itemNode
-                            });
-
-                            queryNode.Methods.Add(orderMethod);
+                        foreach (var m in BuildOrderByMethods(context.orderClause(), "x")) {
+                            queryNode.Methods.Add(m);
                         }
                     }
                 }
@@ -482,12 +426,97 @@ namespace SqlToLinq.Core {
             _hasJoin = savedHasJoin;
             _selectAliases = savedSelectAliases;
             _currentLambdaParam = savedLambdaParam;
-
-            _inWhereClause = savedInWhereClause;
-            _inAggregate = savedInAggregate;
-            _inOrderBy = savedInOrderBy;
+            RestoreClauseState(savedClauseState);
 
             return queryNode;
+        }
+
+        // Builder methods
+
+        private LinqMethodCallNode BuildWhereMethod(
+            SqlParserParser.ConditionContext conditionCtx,
+            string lambdaParam) {
+
+            _inWhereClause = true;
+            var condNode = Visit(conditionCtx);
+            _inWhereClause = false;
+
+            return new LinqMethodCallNode {
+
+                MethodName = "Where",
+                Arguments = new List<LinqNode> {
+                    new LinqLambdaNode { ParameterName = lambdaParam, Body = condNode }
+                }
+            };
+        }
+
+        private LinqNode VisitWhereCondition(SqlParserParser.ConditionContext ctx) {
+
+            _inWhereClause = true;
+            var node = Visit(ctx);
+            _inWhereClause = false;
+
+            return node;
+        }
+
+        private IEnumerable<LinqMethodCallNode> BuildOrderByMethods(
+            SqlParserParser.OrderClauseContext orderClause,
+            string lambdaParam) {
+
+            var items = orderClause.orderItem();
+            var methods = new List<LinqMethodCallNode>();
+
+            for (int i = 0; i < items.Length; i++) {
+
+                _inOrderBy = true;
+                var itemNode = Visit(items[i].expr());
+                _inOrderBy = false;
+
+                bool isDesc = items[i].DESC() != null;
+                string methodName = i == 0
+                    ? (isDesc ? "OrderByDescending" : "OrderBy")
+                    : (isDesc ? "ThenByDescending" : "ThenBy");
+
+                methods.Add(new LinqMethodCallNode {
+
+                    MethodName = methodName,
+                    Arguments = new List<LinqNode> {
+                        new LinqLambdaNode { ParameterName = lambdaParam, Body = itemNode }
+                    }
+                });
+            }
+
+            return methods;
+        }
+
+        private (string TableName, string TableAlias) SetupTableScope(
+            SqlParserParser.TableRefContext tableRef) {
+
+            string tableName = ToPascalCase(tableRef.tableName().GetText());
+            string tableAlias = tableRef.alias() != null
+                ? tableRef.alias().GetText()
+                : tableName.Substring(0, 1).ToLower();
+
+            _currentLambdaParam = "x";
+            _tableAliases = new Dictionary<string, string> { [tableAlias] = tableName };
+            _outerScopes.Push((_tableAliases, _currentLambdaParam));
+
+            return (tableName, tableAlias);
+        }
+
+        private (bool InWhere, bool InAggregate, bool InOrderBy) SaveClauseState() =>
+            (_inWhereClause, _inAggregate, _inOrderBy);
+
+        private void ResetClauseState() {
+            _inWhereClause = false;
+            _inAggregate = false;
+            _inOrderBy = false;
+        }
+
+        private void RestoreClauseState((bool InWhere, bool InAggregate, bool InOrderBy) saved) {
+            _inWhereClause = saved.InWhere;
+            _inAggregate = saved.InAggregate;
+            _inOrderBy = saved.InOrderBy;
         }
 
         private LinqNode BuildInlineViewQuery(
@@ -502,42 +531,14 @@ namespace SqlToLinq.Core {
             // WHERE
 
             if (context.condition() != null) {
-
-                _inWhereClause = true;
-                var condNode = Visit(context.condition());
-                _inWhereClause = false;
-
-                viewQuery.Methods.Add(new LinqMethodCallNode {
-                    MethodName = "Where",
-                    Arguments = new List<LinqNode> {
-                        new LinqLambdaNode { ParameterName = "x", Body = condNode }
-                    }
-                });
+                viewQuery.Methods.Add(BuildWhereMethod(context.condition(), "x"));
             }
 
             // ORDER BY
 
             if (context.orderClause() != null) {
-
-                var orderItems = context.orderClause().orderItem();
-
-                for (int i = 0; i < orderItems.Length; i++) {
-
-                    _inOrderBy = true;
-                    var itemNode = Visit(orderItems[i].expr());
-                    _inOrderBy = false;
-
-                    bool isDesc = orderItems[i].DESC() != null;
-                    string methodName = i == 0
-                        ? (isDesc ? "OrderByDescending" : "OrderBy")
-                        : (isDesc ? "ThenByDescending" : "ThenBy");
-
-                    viewQuery.Methods.Add(new LinqMethodCallNode {
-                        MethodName = methodName,
-                        Arguments = new List<LinqNode> {
-                            new LinqLambdaNode { ParameterName = "x", Body = itemNode }
-                        }
-                    });
+                foreach (var m in BuildOrderByMethods(context.orderClause(), "x")) {
+                    viewQuery.Methods.Add(m);
                 }
             }
 
@@ -546,6 +547,7 @@ namespace SqlToLinq.Core {
             var columnsNode = Visit(context.columnList());
 
             if (columnsNode is LinqAnonymousObjectNode anonNode) {
+
                 viewQuery.Methods.Add(new LinqMethodCallNode {
                     MethodName = "Select",
                     Arguments = new List<LinqNode> {
@@ -556,7 +558,16 @@ namespace SqlToLinq.Core {
 
             // OFFSET / LIMIT
 
+            if (context.offsetClause() != null) {
+
+                viewQuery.Methods.Add(new LinqMethodCallNode {
+                    MethodName = "Skip",
+                    Arguments = new List<LinqNode> { Visit(context.offsetClause().expr()) }
+                });
+            }
+
             if (context.limitClause() != null) {
+
                 viewQuery.Methods.Add(new LinqMethodCallNode {
                     MethodName = "Take",
                     Arguments = new List<LinqNode> { Visit(context.limitClause().expr()) }
@@ -1283,7 +1294,7 @@ namespace SqlToLinq.Core {
             if (_tableAliases.ContainsKey(tableAlias)) {
                 if (_hasJoin) {
                     return new LinqIdentifierNode { Name = $"x.{tableAlias}.{columnName}" };
-                }   
+                }
 
                 // Use the current lambda parameter, not the raw SQL alias.
                 // The SQL alias (e.g. "s", "u") only exists in SQL syntax;
