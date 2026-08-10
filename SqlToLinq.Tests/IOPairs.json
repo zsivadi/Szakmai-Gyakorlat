@@ -1527,7 +1527,7 @@
 		"Id": 257,
 		"Desc": "DELETE NOT IN listával.",
 		"SqlInput": "DELETE FROM Users WHERE Role NOT IN ('Admin', 'Moderator')",
-		"ExpectedLinq": "db.Users.Where(x => !new string[] { \"Admin\", \"Moderator\" }.Contains(x.Role)).ExecuteDeleteAsync()"
+		"ExpectedLinq": "db.Users.Where(x => !(new string[] { \"Admin\", \"Moderator\" }.Contains(x.Role))).ExecuteDeleteAsync()"
 	},
 	{
 		"Id": 258,
@@ -1546,5 +1546,47 @@
 		"Desc": "DELETE NOT EXISTS korrelált szubkérdezéssel aliasokkal.",
 		"SqlInput": "DELETE FROM Users u WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)",
 		"ExpectedLinq": "db.Users.Where(x => !(db.Orders.Where(o => o.Owner == x.Id)).Any()).ExecuteDeleteAsync()"
+	},
+	{
+		"Id": 261,
+		"Desc": "INSERT INTO egyszerű eset explicit oszloplistával.",
+		"SqlInput": "INSERT INTO Users (Name, Age, Role) VALUES ('Bob', 25, 'Admin')",
+		"ExpectedLinq": "db.Users.Add(new Users { Name = \"Bob\", Age = 25, Role = \"Admin\" });\ndb.SaveChanges();"
+	},
+	{
+		"Id": 262,
+		"Desc": "INSERT INTO oszloplista nélkül.",
+		"SqlInput": "INSERT INTO Users VALUES ('Bob', 25, 'Admin')",
+		"ExpectedLinq": "db.Users.Add(new Users { Col1 = \"Bob\", Col2 = 25, Col3 = \"Admin\" });\ndb.SaveChanges();"
+	},
+	{
+		"Id": 263,
+		"Desc": "INSERT INTO NULL értékkel.",
+		"SqlInput": "INSERT INTO Users (Name, Age, Bonus) VALUES ('Alice', 19, NULL)",
+		"ExpectedLinq": "db.Users.Add(new Users { Name = \"Alice\", Age = 19, Bonus = null });\ndb.SaveChanges();"
+	},
+	{
+		"Id": 264,
+		"Desc": "INSERT INTO több sorral (AddRange).",
+		"SqlInput": "INSERT INTO Users (Name, Age) VALUES ('Bob', 25), ('Alice', 19)",
+		"ExpectedLinq": "db.Users.AddRange(new List<Users>\n{\n    new Users { Name = \"Bob\", Age = 25 },\n    new Users { Name = \"Alice\", Age = 19 }\n});\ndb.SaveChanges();"
+	},
+	{
+		"Id": 265,
+		"Desc": "INSERT INTO kifejezéssel VALUE-ban.",
+		"SqlInput": "INSERT INTO Orders (Owner, Qty) VALUES (1, 2 + 3)",
+		"ExpectedLinq": "db.Orders.Add(new Orders { Owner = 1, Qty = 2 + 3 });\ndb.SaveChanges();"
+	},
+	{
+	  "Id": 266,
+	  "Desc": "INSERT INTO ... SELECT egyszerű WHERE feltétellel.",
+	  "SqlInput": "INSERT INTO Orders (Owner, Item, Qty) SELECT Id, 'Default', 0 FROM Users WHERE Role = 'Admin'",
+	  "ExpectedLinq": "db.Orders.AddRange((db.Users.Where(x => x.Role == \"Admin\")).Select(x => new Orders { Owner = x.Id, Item = \"Default\", Qty = 0 }).ToList());\ndb.SaveChanges();"
+	},
+	{
+	  "Id": 267,
+	  "Desc": "INSERT INTO ... SELECT WHERE nélkül, teljes tábla.",
+	  "SqlInput": "INSERT INTO Orders (Owner, Qty) SELECT Id, Points FROM Users",
+	  "ExpectedLinq": "db.Orders.AddRange((db.Users).Select(x => new Orders { Owner = x.Id, Qty = x.Points }).ToList());\ndb.SaveChanges();"
 	}
 ]

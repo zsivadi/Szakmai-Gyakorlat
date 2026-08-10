@@ -656,9 +656,9 @@ namespace SqlToLinq.Tests {
             Assert.That(_db.Users.Any(u => u.Name == "B.b"), Is.False);
             Assert.That(_db.Users.Any(u => u.Name == "Alice"), Is.False);
 
-            Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.True);  
-            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.True);  
-            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True); 
+            Assert.That(_db.Users.Any(u => u.Name == "Bcb"), Is.True);
+            Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.True);
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True);
         }
 
         [Test]
@@ -698,7 +698,7 @@ namespace SqlToLinq.Tests {
             Assert.That(_db.Orders.Any(o => o.Item == "Laptop"), Is.False);
             Assert.That(_db.Orders.Any(o => o.Item == "Mouse"), Is.False);
             Assert.That(_db.Orders.Any(o => o.Item == "Monitor"), Is.False);
-            Assert.That(_db.Orders.Any(o => o.Item == "Keyboard"), Is.True); 
+            Assert.That(_db.Orders.Any(o => o.Item == "Keyboard"), Is.True);
         }
 
         [Test]
@@ -710,7 +710,7 @@ namespace SqlToLinq.Tests {
 
             Assert.That(deleted, Is.EqualTo(1));
             Assert.That(_db.Users.Any(u => u.Name == "bob"), Is.False);
-            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True);  
+            Assert.That(_db.Users.Any(u => u.Name == "Bab"), Is.True);
 
             Assert.That(_db.Users.Count(), Is.EqualTo(5));
         }
@@ -895,6 +895,226 @@ namespace SqlToLinq.Tests {
         private static string SerializeRow(Dictionary<string, object> row) {
             return string.Join("|", row.OrderBy(kv => kv.Key, StringComparer.Ordinal)
                                        .Select(kv => $"{kv.Key}={NormalizeValue(kv.Value)}"));
+        }
+
+
+        [Test]
+        public void Insert_With_Explicit_Column_List_Adds_Row() {
+
+            int countBefore = _db.Users.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Users (Name, Age, Role) VALUES ('Charlie', 35, 'Admin')"));
+
+            Assert.That(_db.Users.Count(), Is.EqualTo(countBefore + 1));
+
+            var added = _db.Users.FirstOrDefault(u => u.Name == "Charlie");
+
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.Age, Is.EqualTo(35));
+            Assert.That(added.Role, Is.EqualTo("Admin"));
+        }
+
+        [Test]
+        public void Insert_With_Null_Value_Persists_Null_Column() {
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Users (Name, Age, Bonus) VALUES ('NullBonusUser', 21, NULL)"));
+
+            var added = _db.Users.FirstOrDefault(u => u.Name == "NullBonusUser");
+            Assert.That(added, Is.Not.Null, "A sor nem kerülte be az adatbázisba.");
+            Assert.That(added.Bonus, Is.Null, "A Bonus oszlopnak NULL-nak kell lennie.");
+        }
+
+        [Test]
+        public void Insert_MultiRow_AddRange_Adds_All_Rows() {
+
+            int countBefore = _db.Users.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Users (Name, Age) VALUES ('MultiA', 31), ('MultiB', 32)"));
+
+            Assert.That(_db.Users.Count(), Is.EqualTo(countBefore + 2));
+            Assert.That(_db.Users.Any(u => u.Name == "MultiA" && u.Age == 31), Is.True);
+            Assert.That(_db.Users.Any(u => u.Name == "MultiB" && u.Age == 32), Is.True);
+        }
+
+        [Test]
+        public void Insert_With_Arithmetic_Expression_In_Value_Computes_Correctly() {
+
+            int countBefore = _db.Orders.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Orders (Owner, Qty) VALUES (1, 2 + 3)"));
+
+            Assert.That(_db.Orders.Count(), Is.EqualTo(countBefore + 1));
+
+            var added = _db.Orders
+                .OrderByDescending(o => o.Id)
+                .FirstOrDefault(o => o.Owner == 1 && o.Qty == 5);
+
+            Assert.That(added, Is.Not.Null, "Owner=1, Qty=5 sor nem jött létre.");
+        }
+
+        [Test]
+        public void Insert_Into_Orders_Table_Adds_Row_Correctly() {
+
+            int countBefore = _db.Orders.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Orders (Owner, Item, Qty) VALUES (2, 'Tablet', 1)"));
+
+            Assert.That(_db.Orders.Count(), Is.EqualTo(countBefore + 1));
+
+            var added = _db.Orders.FirstOrDefault(o => o.Item == "Tablet");
+
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.Owner, Is.EqualTo(2));
+            Assert.That(added.Qty, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Insert_With_String_And_Int_Values_Sets_Both_Correctly() {
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Users (Name, Age, Role) VALUES ('TypeCheck', 28, 'User')"));
+
+            var added = _db.Users.FirstOrDefault(u => u.Name == "TypeCheck");
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.Age, Is.EqualTo(28));
+            Assert.That(added.Role, Is.EqualTo("User"));
+        }
+
+        [Test]
+        public void Insert_Transpiler_Output_Matches_Expected_Linq_For_Single_Row() {
+
+            string generated = SqlToLinqConverter.Convert(
+                "INSERT INTO Users (Name, Age, Role) VALUES ('Bob', 25, 'Admin')");
+
+            string expected =
+                "db.Users.Add(new Users { Name = \"Bob\", Age = 25, Role = \"Admin\" });\n" +
+                "db.SaveChanges();";
+
+            Assert.That(
+                generated.Replace(" ", "").Replace("\r", ""),
+                Is.EqualTo(expected.Replace(" ", "").Replace("\r", "")));
+        }
+
+        [Test]
+        public void Insert_Transpiler_Output_Matches_Expected_Linq_For_Null_Value() {
+
+            string generated = SqlToLinqConverter.Convert(
+                "INSERT INTO Users (Name, Age, Bonus) VALUES ('Alice', 19, NULL)");
+
+            string expected =
+                "db.Users.Add(new Users { Name = \"Alice\", Age = 19, Bonus = null });\n" +
+                "db.SaveChanges();";
+
+            Assert.That(
+                generated.Replace(" ", "").Replace("\r", ""),
+                Is.EqualTo(expected.Replace(" ", "").Replace("\r", "")));
+        }
+
+        [Test]
+        public void Insert_Transpiler_Output_Matches_Expected_Linq_For_MultiRow() {
+
+            string generated = SqlToLinqConverter.Convert(
+                "INSERT INTO Users (Name, Age) VALUES ('Bob', 25), ('Alice', 19)");
+
+            string expected =
+                "db.Users.AddRange(new List<Users>\n{\n    new Users { Name = \"Bob\", Age = 25 },\n    new Users { Name = \"Alice\", Age = 19 }\n});\ndb.SaveChanges();";
+
+            Assert.That(
+                generated.Replace(" ", "").Replace("\r", ""),
+                Is.EqualTo(expected.Replace(" ", "").Replace("\r", "")));
+        }
+
+        [Test]
+        public void Insert_Select_With_Where_Adds_Filtered_Rows_As_New_Entity() {
+
+            int countBefore = _db.Orders.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Orders (Owner, Item, Qty) SELECT Id, 'Default', 0 FROM Users WHERE Role = 'Admin'"));
+
+            Assert.That(_db.Orders.Count(), Is.EqualTo(countBefore + 2));
+            Assert.That(_db.Orders.Any(o => o.Owner == 1 && o.Item == "Default" && o.Qty == 0), Is.True);
+            Assert.That(_db.Orders.Any(o => o.Owner == 6 && o.Item == "Default" && o.Qty == 0), Is.True);
+        }
+
+        [Test]
+        public void Insert_Select_Without_Where_Adds_All_Source_Rows() {
+
+            int countBefore = _db.Orders.Count();
+
+            RunGeneratedInsert(
+                SqlToLinqConverter.Convert(
+                    "INSERT INTO Orders (Owner, Qty) SELECT Id, Points FROM Users"));
+
+            Assert.That(_db.Orders.Count(), Is.EqualTo(countBefore + 6));
+            Assert.That(_db.Orders.Any(o => o.Owner == 1 && o.Qty == 100), Is.True);
+            Assert.That(_db.Orders.Any(o => o.Owner == 6 && o.Qty == 200), Is.True);
+        }
+
+        private void RunGeneratedInsert(string linqCode) {
+
+            string source = $@"
+                using System;
+                using System.Linq;
+                using System.Collections.Generic;
+                using Microsoft.EntityFrameworkCore;
+                using SqlToLinq.Tests;
+
+                using Users      = SqlToLinq.Tests.User;
+                using Orders     = SqlToLinq.Tests.Order;
+                using Products   = SqlToLinq.Tests.Product;
+                using Categories = SqlToLinq.Tests.Category;
+                using Warehouses = SqlToLinq.Tests.Warehouse;
+
+                public static class InsertRunner {{
+                    public static void Run(TestDbContext db) {{
+                        {linqCode}
+                    }}
+            }}";
+
+            var references = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+                .Select(a => MetadataReference.CreateFromFile(a.Location))
+                .ToList();
+
+            var compilation = CSharpCompilation.Create(
+                assemblyName: "InsertRunner",
+                syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+            using var ms = new System.IO.MemoryStream();
+            var result = compilation.Emit(ms);
+
+            if (!result.Success) {
+
+                var errors = string.Join("\n", result.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.ToString()));
+
+                throw new InvalidOperationException(
+                    $"[ERROR] Roslyn compilation failed.\nLINQ: {linqCode}\nErrors:\n{errors}");
+            }
+
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+
+            var assembly = Assembly.Load(ms.ToArray());
+            var type = assembly.GetType("InsertRunner");
+            var method = type.GetMethod("Run");
+
+            method.Invoke(null, new object[] { _db });
         }
     }
 }

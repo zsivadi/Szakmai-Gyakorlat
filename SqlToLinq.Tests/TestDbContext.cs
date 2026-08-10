@@ -3,41 +3,41 @@ using Microsoft.EntityFrameworkCore;
 
 namespace SqlToLinq.Tests {
 
-    public record User(
-        int Id,
-        string Name,
-        int? Age,
-        string Role,
-        int? Points,
-        int? Bonus,
-        DateTime? CreatedAt
-    );
+    public class User {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public int? Age { get; set; }
+        public string? Role { get; set; }
+        public int? Points { get; set; }
+        public int? Bonus { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
 
-    public record Order(
-        int Id,
-        int? Owner,
-        string Item,
-        int? Qty
-    );
+    public class Order {
+        public int Id { get; set; }
+        public int? Owner { get; set; }
+        public string? Item { get; set; }
+        public int? Qty { get; set; }
+    }
 
-    public record Product(
-        int Id,
-        int? Parent,
-        string Title,
-        int? Price
-    );
+    public class Product {
+        public int Id { get; set; }
+        public int? Parent { get; set; }
+        public string? Title { get; set; }
+        public int? Price { get; set; }
+    }
 
-    public record Category(
-        int Id,
-        int? Parent,
-        string Label
-    );
+    public class Category {
+        public int Id { get; set; }
+        public int? Parent { get; set; }
+        public string? Label { get; set; }
+    }
 
-    public record Warehouse(
-        int Id,
-        int? Parent,
-        string Location
-    );
+    public class Warehouse {
+        public int Id { get; set; }
+        public int? Parent { get; set; }
+        public string? Location { get; set; }
+    }
 
     public class TestDbContext : DbContext {
 
@@ -66,37 +66,37 @@ namespace SqlToLinq.Tests {
         public static void Seed(DbContext db) {
 
             db.Set<User>().AddRange(
-                new User(1, "Bob", 25, "Admin", 100, 10, new DateTime(2022, 1, 15, 0, 0, 0, DateTimeKind.Utc)),
-                new User(2, "Bab", 30, "User", 50, 5, new DateTime(2022, 3, 20, 0, 0, 0, DateTimeKind.Utc)),
-                new User(3, "Bcb", 17, "User", 20, 0, new DateTime(2023, 6, 1, 0, 0, 0, DateTimeKind.Utc)),
-                new User(4, "bob", 40, "Moderator", 80, 15, new DateTime(2021, 11, 5, 0, 0, 0, DateTimeKind.Utc)),
-                new User(5, "B.b", 22, "User", 10, 0, new DateTime(2023, 8, 22, 0, 0, 0, DateTimeKind.Utc)),
-                new User(6, "Alice", 19, "Admin", 200, 50, new DateTime(2024, 2, 29, 0, 0, 0, DateTimeKind.Utc))
+                new User { Id = 1, Name = "Bob", Age = 25, Role = "Admin", Points = 100, Bonus = 10, CreatedAt = new DateTime(2022, 1, 15, 0, 0, 0, DateTimeKind.Utc) },
+                new User { Id = 2, Name = "Bab", Age = 30, Role = "User", Points = 50, Bonus = 5, CreatedAt = new DateTime(2022, 3, 20, 0, 0, 0, DateTimeKind.Utc) },
+                new User { Id = 3, Name = "Bcb", Age = 17, Role = "User", Points = 20, Bonus = 0, CreatedAt = new DateTime(2023, 6, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new User { Id = 4, Name = "bob", Age = 40, Role = "Moderator", Points = 80, Bonus = 15, CreatedAt = new DateTime(2021, 11, 5, 0, 0, 0, DateTimeKind.Utc) },
+                new User { Id = 5, Name = "B.b", Age = 22, Role = "User", Points = 10, Bonus = 0, CreatedAt = new DateTime(2023, 8, 22, 0, 0, 0, DateTimeKind.Utc) },
+                new User { Id = 6, Name = "Alice", Age = 19, Role = "Admin", Points = 200, Bonus = 50, CreatedAt = new DateTime(2024, 2, 29, 0, 0, 0, DateTimeKind.Utc) }
             );
 
             db.Set<Order>().AddRange(
-                new Order(1, 1, "Laptop", 1),
-                new Order(2, 1, "Mouse", 2),
-                new Order(3, 2, "Keyboard", 1),
-                new Order(4, 6, "Monitor", 1)
+                new Order { Id = 1, Owner = 1, Item = "Laptop", Qty = 1 },
+                new Order { Id = 2, Owner = 1, Item = "Mouse", Qty = 2 },
+                new Order { Id = 3, Owner = 2, Item = "Keyboard", Qty = 1 },
+                new Order { Id = 4, Owner = 6, Item = "Monitor", Qty = 1 }
             );
 
             db.Set<Product>().AddRange(
-                new Product(1, 1, "Keyboard Skin", 15),
-                new Product(2, 1, "Mouse Pad", 8),
-                new Product(3, 3, "USB Cable", 5),
-                new Product(4, 4, "HDMI Cable", 12)
+                new Product { Id = 1, Parent = 1, Title = "Keyboard Skin", Price = 15 },
+                new Product { Id = 2, Parent = 1, Title = "Mouse Pad", Price = 8 },
+                new Product { Id = 3, Parent = 3, Title = "USB Cable", Price = 5 },
+                new Product { Id = 4, Parent = 4, Title = "HDMI Cable", Price = 12 }
             );
 
             db.Set<Category>().AddRange(
-                new Category(1, 1, "Accessories"),
-                new Category(2, 2, "Accessories"),
-                new Category(3, 4, "Cables")
+                new Category { Id = 1, Parent = 1, Label = "Accessories" },
+                new Category { Id = 2, Parent = 2, Label = "Accessories" },
+                new Category { Id = 3, Parent = 4, Label = "Cables" }
             );
 
             db.Set<Warehouse>().AddRange(
-                new Warehouse(1, 1, "Budapest"),
-                new Warehouse(2, 3, "Debrecen")
+                new Warehouse { Id = 1, Parent = 1, Location = "Budapest" },
+                new Warehouse { Id = 2, Parent = 3, Location = "Debrecen" }
             );
 
             db.SaveChanges();
