@@ -69,7 +69,7 @@ namespace SqlToLinq.Tests {
         public void Unsupported_Statement_Type_Should_Throw_NotSupportedException() {
 
             Assert.Throws<SqlSyntaxException>(() =>
-                SqlToLinqConverter.Convert("UPDATE Users SET Name = 'Admin' WHERE Id = 1"));
+                SqlToLinqConverter.Convert("CREATE TABLE Foo (Id INT)"));
         }
 
         [Test]

@@ -1588,5 +1588,47 @@
 	  "Desc": "INSERT INTO ... SELECT WHERE nélkül, teljes tábla.",
 	  "SqlInput": "INSERT INTO Orders (Owner, Qty) SELECT Id, Points FROM Users",
 	  "ExpectedLinq": "db.Orders.AddRange((db.Users).Select(x => new Orders { Owner = x.Id, Qty = x.Points }).ToList());\ndb.SaveChanges();"
+	},
+	{
+	  "Id": 268,
+	  "Desc": "UPDATE WHERE feltétellel, konstans érték.",
+	  "SqlInput": "UPDATE Users SET Role = 'Admin' WHERE Age > 30",
+	  "ExpectedLinq": "db.Users.Where(x => x.Age > 30).ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Role, \"Admin\"))"
+	},
+	{
+	  "Id": 269,
+	  "Desc": "UPDATE WHERE nélkül, teljes tábla.",
+	  "SqlInput": "UPDATE Users SET Points = 0",
+	  "ExpectedLinq": "db.Users.ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Points, 0))"
+	},
+	{
+	  "Id": 270,
+	  "Desc": "UPDATE több SET oszloppal, vegyes konstans és számítás.",
+	  "SqlInput": "UPDATE Users SET Points = Points + 10, Bonus = 0 WHERE Role = 'User'",
+	  "ExpectedLinq": "db.Users.Where(x => x.Role == \"User\").ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Points, x => x.Points + 10)\n        .SetProperty(x => x.Bonus, 0))"
+	},
+	{
+	  "Id": 271,
+	  "Desc": "UPDATE oszlop értékét saját magára hivatkozó kifejezéssel.",
+	  "SqlInput": "UPDATE Users SET Points = Points * 2 WHERE Role = 'Admin'",
+	  "ExpectedLinq": "db.Users.Where(x => x.Role == \"Admin\").ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Points, x => x.Points * 2))"
+	},
+	{
+	  "Id": 272,
+	  "Desc": "UPDATE NULL értékkel.",
+	  "SqlInput": "UPDATE Users SET Bonus = NULL WHERE Age < 18",
+	  "ExpectedLinq": "db.Users.Where(x => x.Age < 18).ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Bonus, x => null))"
+	},
+	{
+	  "Id": 273,
+	  "Desc": "UPDATE CASE WHEN kifejezéssel a SET-ben.",
+	  "SqlInput": "UPDATE Users SET Role = CASE WHEN Age >= 18 THEN 'Admin' ELSE 'User' END WHERE Points > 50",
+	  "ExpectedLinq": "db.Users.Where(x => x.Points > 50).ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Role, x => (x.Age >= 18 ? \"Admin\" : \"User\")))"
+	},
+	{
+	  "Id": 274,
+	  "Desc": "UPDATE WHERE IN listával.",
+	  "SqlInput": "UPDATE Users SET Role = 'Moderator' WHERE Id IN (1, 2, 3)",
+	  "ExpectedLinq": "db.Users.Where(x => new int?[] { 1, 2, 3 }.Contains(x.Id)).ExecuteUpdateAsync(s => s\n.SetProperty(x => x.Role, \"Moderator\"))"
 	}
 ]

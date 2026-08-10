@@ -534,8 +534,7 @@ namespace SqlToLinq.Tests {
             Assert.That(rows[0]["b"]?.ToString(), Is.EqualTo("10"), $"LINQ: {linq}");
         }
 
-
-        // ── DELETE ──────────────────────────────────────────────────────────
+        // DELETE
 
         [Test]
         public void Delete_With_Where_Removes_Matching_Rows() {
@@ -1061,6 +1060,126 @@ namespace SqlToLinq.Tests {
             Assert.That(_db.Orders.Count(), Is.EqualTo(countBefore + 6));
             Assert.That(_db.Orders.Any(o => o.Owner == 1 && o.Qty == 100), Is.True);
             Assert.That(_db.Orders.Any(o => o.Owner == 6 && o.Qty == 200), Is.True);
+        }
+
+        [Test]
+        public void Update_With_Where_Updates_Only_Matching_Rows() {
+
+            RunGeneratedUpdate(
+                SqlToLinqConverter.Convert(
+                    "UPDATE Users SET Role = 'Admin' WHERE Age > 30"));
+
+            Assert.That(_db.Users.Where(u => u.Age > 30).All(u => u.Role == "Admin"), Is.True);
+            Assert.That(_db.Users.Where(u => u.Age <= 30).All(u => u.Role != "Admin" || u.Role == "Admin"), Is.True);
+
+            Assert.That(_db.Users.First(u => u.Name == "Bob").Role, Is.EqualTo("Admin"));  
+            Assert.That(_db.Users.First(u => u.Name == "bob").Role, Is.EqualTo("Admin"));   
+        }
+
+        [Test]
+        public void Update_Without_Where_Updates_All_Rows() {
+
+            RunGeneratedUpdate(
+                SqlToLinqConverter.Convert(
+                    "UPDATE Users SET Points = 0"));
+
+            Assert.That(_db.Users.All(u => u.Points == 0), Is.True);
+        }
+
+        [Test]
+        public void Update_Multiple_Columns_Mixed_Constant_And_Expression() {
+
+            RunGeneratedUpdate(
+                SqlToLinqConverter.Convert(
+                    "UPDATE Users SET Points = Points + 10, Bonus = 0 WHERE Role = 'User'"));
+
+            Assert.That(_db.Users.First(u => u.Name == "Bab").Points, Is.EqualTo(60));
+            Assert.That(_db.Users.First(u => u.Name == "Bcb").Points, Is.EqualTo(30));
+            Assert.That(_db.Users.First(u => u.Name == "B.b").Points, Is.EqualTo(20));
+
+            Assert.That(_db.Users.Where(u => u.Role == "User").All(u => u.Bonus == 0), Is.True);
+            Assert.That(_db.Users.First(u => u.Name == "Bob").Points, Is.EqualTo(100));
+        }
+
+        [Test]
+        public void Update_With_Null_Value_Sets_Column_To_Null() {
+
+            RunGeneratedUpdate(
+                SqlToLinqConverter.Convert(
+                    "UPDATE Users SET Bonus = NULL WHERE Age < 18"));
+
+            Assert.That(_db.Users.First(u => u.Name == "Bcb").Bonus, Is.Null);
+            Assert.That(_db.Users.First(u => u.Name == "Bob").Bonus, Is.EqualTo(10));
+        }
+
+        [Test]
+        public void Update_Transpiler_Output_Matches_Expected_For_Expression_Value() {
+
+            string generated = SqlToLinqConverter.Convert(
+                "UPDATE Users SET Points = Points * 2 WHERE Role = 'Admin'");
+
+            string expected =
+                "db.Users.Where(x => x.Role == \"Admin\").ExecuteUpdateAsync(s => s\n" +
+                "        .SetProperty(x => x.Points, x => x.Points * 2))";
+
+            Assert.That(
+                generated.Replace(" ", "").Replace("\r", ""),
+                Is.EqualTo(expected.Replace(" ", "").Replace("\r", "")));
+        }
+
+        private void RunGeneratedUpdate(string linqCode) {
+
+            string source = $@"
+        using System;
+        using System.Linq;
+        using System.Collections.Generic;
+        using Microsoft.EntityFrameworkCore;
+        using SqlToLinq.Tests;
+
+        using Users      = SqlToLinq.Tests.User;
+        using Orders     = SqlToLinq.Tests.Order;
+        using Products   = SqlToLinq.Tests.Product;
+        using Categories = SqlToLinq.Tests.Category;
+        using Warehouses = SqlToLinq.Tests.Warehouse;
+
+        public static class UpdateRunner {{
+            public static void Run(TestDbContext db) {{
+                {linqCode}.GetAwaiter().GetResult();
+                db.ChangeTracker.Clear();
+            }}
+        }}";
+
+            var references = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+                .Select(a => MetadataReference.CreateFromFile(a.Location))
+                .ToList();
+
+            var compilation = CSharpCompilation.Create(
+                assemblyName: "UpdateRunner",
+                syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+            using var ms = new System.IO.MemoryStream();
+            var result = compilation.Emit(ms);
+
+            if (!result.Success) {
+
+                var errors = string.Join("\n", result.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.ToString()));
+
+                throw new InvalidOperationException(
+                    $"[ERROR] Roslyn compilation failed.\nLINQ: {linqCode}\nErrors:\n{errors}");
+            }
+
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+
+            var assembly = Assembly.Load(ms.ToArray());
+            var type = assembly.GetType("UpdateRunner");
+            var method = type.GetMethod("Run");
+
+            method.Invoke(null, new object[] { _db });
         }
 
         private void RunGeneratedInsert(string linqCode) {
