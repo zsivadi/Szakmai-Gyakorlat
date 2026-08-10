@@ -1,7 +1,8 @@
 grammar SqlParser;
 
 query : selectQuery SEMICOLON? EOF
-      | deleteStmt SEMICOLON? EOF
+      | deleteStmt  SEMICOLON? EOF
+      | insertStmt  SEMICOLON? EOF
       ;
 
 selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
@@ -19,7 +20,11 @@ selectStmt : SELECT DISTINCT? columnList FROM fromClause (WHERE condition)?
 
 updateStmt : UPDATE tableName SET setClause (WHERE condition)? ;
 
-insertStmt : INSERT INTO tableName ('(' idList ')')? VALUES '(' valueList ')' ;
+insertStmt : INSERT INTO tableName ('(' idList ')')? VALUES valueRow (COMMA valueRow)*      # insertValues
+           | INSERT INTO tableName ('(' idList ')')? selectQuery                            # insertSelect
+           ;
+
+valueRow : '(' valueList ')' ;
 
 deleteStmt : DELETE FROM tableRef (WHERE condition)? ;
 
@@ -106,6 +111,7 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | NUMBER                                                   # numberExpr
      | FLOAT                                                    # floatExpr
      | STRING_LITERAL                                           # stringExpr
+     | NULL_TOKEN                                               # nullExpr
      ;
 
 caseExpr : CASE caseOperand=expr? (WHEN condition THEN expr)+ (ELSE elseExpr=expr)? END ;

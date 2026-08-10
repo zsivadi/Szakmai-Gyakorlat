@@ -33,11 +33,20 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
 
+            if (context.selectQuery() != null) {
+                return Visit(context.selectQuery());
+            }
+
             if (context.deleteStmt() != null) {
                 return Visit(context.deleteStmt());
             }
 
-            return Visit(context.selectQuery());
+            if (context.insertStmt() != null) {
+                return Visit(context.insertStmt());
+            }
+
+            throw new NotSupportedException(
+                "[ERROR] Unsupported statement type. Only SELECT, DELETE and INSERT are supported.");
         }
 
         public override LinqNode VisitDeleteStmt([NotNull] SqlParserParser.DeleteStmtContext context) {
@@ -56,6 +65,59 @@ namespace SqlToLinq.Core {
                 SourceTable = tableName,
                 WhereCondition = whereCondition,
                 LambdaParam = _currentLambdaParam
+            };
+        }
+
+        public override LinqNode VisitInsertValues([NotNull] SqlParserParser.InsertValuesContext context) {
+
+            string tableName = ToPascalCase(context.tableName().GetText());
+
+            bool hasExplicitColumns = context.idList() != null;
+            var columnNames = hasExplicitColumns
+                ? context.idList().IDENTIFIER().Select(id => ToPascalCase(id.GetText())).ToList()
+                : new List<string>();
+
+            var rows = new List<List<(string ColumnName, LinqNode Value)>>();
+
+            foreach (var row in context.valueRow()) {
+
+                var values = row.valueList().expr();
+                var cols = hasExplicitColumns
+                    ? columnNames
+                    : values.Select((_, i) => $"Col{i + 1}").ToList();
+
+                if (hasExplicitColumns && cols.Count != values.Length) {
+                    throw new NotSupportedException(
+                        $"[ERROR] INSERT column count ({cols.Count}) does not match VALUES count ({values.Length}).");
+                }
+
+                var rowPairs = cols.Zip(values, (col, val) => (col, Visit(val))).ToList();
+                rows.Add(rowPairs);
+            }
+
+            return new LinqInsertNode {
+                SourceTable = tableName,
+                Rows = rows,
+                HasExplicitColumns = hasExplicitColumns
+            };
+        }
+
+        public override LinqNode VisitInsertSelect([NotNull] SqlParserParser.InsertSelectContext context) {
+
+            string tableName = ToPascalCase(context.tableName().GetText());
+
+            var columnNames = context.idList() != null
+                ? context.idList().IDENTIFIER().Select(id => ToPascalCase(id.GetText())).ToList()
+                : new List<string>();
+
+            _outerScopes.Push((_tableAliases, _currentLambdaParam));
+            LinqNode selectNode = Visit(context.selectQuery());
+            _outerScopes.Pop();
+
+            return new LinqInsertSelectNode {
+                TargetTable = tableName,
+                ColumnNames = columnNames,
+                SelectQuery = selectNode
             };
         }
 
@@ -1207,6 +1269,9 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitFalseExpr([NotNull] SqlParserParser.FalseExprContext context) {
             return new LinqConstantNode { Value = false };
+        }
+        public override LinqNode VisitNullExpr([NotNull] SqlParserParser.NullExprContext context) {
+            return new LinqConstantNode { Value = null };
         }
 
         // CASE WHEN 

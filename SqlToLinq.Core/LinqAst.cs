@@ -552,6 +552,89 @@ namespace SqlToLinq.Core {
         }
     }
 
+    public class LinqInsertNode : LinqNode {
+
+        public string SourceTable { get; set; }
+
+        public List<List<(string ColumnName, LinqNode Value)>> Rows { get; set; }
+            = new List<List<(string, LinqNode)>>();
+
+        public bool HasExplicitColumns { get; set; }
+
+        public override string ToCodeString() {
+
+            string MakeInit(List<(string ColumnName, LinqNode Value)> row) {
+                var props = string.Join(", ", row.Select(p => $"{p.ColumnName} = {p.Value.ToCodeString()}"));
+                return $"new {SourceTable} {{ {props} }}";
+            }
+
+            if (Rows.Count == 1) {
+                string init = MakeInit(Rows[0]);
+                return $"db.{SourceTable}.Add({init});\ndb.SaveChanges();";
+            }
+
+            var items = string.Join($",\n    ", Rows.Select(MakeInit));
+            return $"db.{SourceTable}.AddRange(new List<{SourceTable}>\n{{\n{items}\n}});\ndb.SaveChanges();";
+        }
+    }
+
+    // INSERT INTO table (cols) SELECT ...
+
+    public class LinqInsertSelectNode : LinqNode {
+
+        public string TargetTable { get; set; }
+
+        public List<string> ColumnNames { get; set; } = new List<string>();
+
+        public LinqNode SelectQuery { get; set; }
+
+        public override string ToCodeString() {
+
+            bool hasColumns = ColumnNames != null && ColumnNames.Count > 0;
+
+            if (hasColumns && SelectQuery is LinqQueryNode qn) {
+
+                int selectIdx = -1;
+                for (int i = qn.Methods.Count - 1; i >= 0; i--) {
+                    if (qn.Methods[i] is LinqMethodCallNode m && m.MethodName == "Select") {
+                        selectIdx = i;
+                        break;
+                    }
+                }
+
+                if (selectIdx >= 0 &&
+                    qn.Methods[selectIdx] is LinqMethodCallNode selectMethod &&
+                    selectMethod.Arguments.Count == 1 &&
+                    selectMethod.Arguments[0] is LinqLambdaNode lambda &&
+                    lambda.Body is LinqAnonymousObjectNode anon &&
+                    anon.Properties.Count == ColumnNames.Count) {
+
+                    string param = lambda.ParameterName;
+                    string baseChain = $"db.{qn.SourceTable}";
+
+                    for (int i = 0; i < selectIdx; i++) {
+                        baseChain += qn.Methods[i].ToCodeString();
+                    }
+
+                    var assignments = ColumnNames
+                        .Zip(anon.Properties, (col, prop) => $"{col} = {prop.Expression.ToCodeString()}")
+                        .ToList();
+
+                    string init = $"new {TargetTable} {{ {string.Join(", ", assignments)} }}";
+
+                    return $"db.{TargetTable}.AddRange(({baseChain}).Select({param} => {init}).ToList());\ndb.SaveChanges();";
+                }
+            }
+
+            string inner = SelectQuery.ToCodeString();
+            if (inner.EndsWith(".ToList()")) {
+                inner = inner.Substring(0, inner.Length - ".ToList()".Length);
+            }
+
+            return $"db.{TargetTable}.AddRange(({inner}).ToList());\ndb.SaveChanges();";
+        }
+    }
+
     public class LinqInlineViewQueryNode : LinqNode {
 
         public string SubqueryCode { get; set; }
