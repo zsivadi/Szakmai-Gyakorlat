@@ -45,8 +45,13 @@ namespace SqlToLinq.Core {
                 return Visit(context.insertStmt());
             }
 
+            if (context.updateStmt() != null) {
+                return Visit(context.updateStmt());
+            }
+
             throw new NotSupportedException(
-                "[ERROR] Unsupported statement type. Only SELECT, DELETE and INSERT are supported.");
+                "[ERROR] Unsupported statement type. Only SELECT, DELETE, INSERT and UPDATE are supported.");
+
         }
 
         public override LinqNode VisitDeleteStmt([NotNull] SqlParserParser.DeleteStmtContext context) {
@@ -63,6 +68,43 @@ namespace SqlToLinq.Core {
 
             return new LinqDeleteNode {
                 SourceTable = tableName,
+                WhereCondition = whereCondition,
+                LambdaParam = _currentLambdaParam
+            };
+        }
+
+        public override LinqNode VisitUpdateStmt([NotNull] SqlParserParser.UpdateStmtContext context) {
+
+            string tableName = ToPascalCase(context.tableName().GetText());
+
+            _currentLambdaParam = "x";
+            _tableAliases = new Dictionary<string, string> { [tableName.Substring(0, 1).ToLower()] = tableName };
+            _outerScopes.Push((_tableAliases, _currentLambdaParam));
+
+            var assignments = new List<(string ColumnName, LinqNode Value)>();
+
+            foreach (var assignment in context.setClause().assignment()) {
+
+                string colName = ToPascalCase(assignment.IDENTIFIER().GetText());
+
+                _inWhereClause = true;
+                LinqNode valueNode = Visit(assignment.expr());
+                _inWhereClause = false;
+
+                assignments.Add((colName, valueNode));
+            }
+
+            LinqNode whereCondition = null;
+
+            if (context.condition() != null) {
+                whereCondition = VisitWhereCondition(context.condition());
+            }
+
+            _outerScopes.Pop();
+
+            return new LinqUpdateNode {
+                SourceTable = tableName,
+                Assignments = assignments,
                 WhereCondition = whereCondition,
                 LambdaParam = _currentLambdaParam
             };

@@ -552,6 +552,67 @@ namespace SqlToLinq.Core {
         }
     }
 
+    // UPDATE table SET ... WHERE ...
+
+    public class LinqUpdateNode : LinqNode {
+
+        public string SourceTable { get; set; }
+
+        public List<(string ColumnName, LinqNode Value)> Assignments { get; set; }
+            = new List<(string, LinqNode)>();
+
+        public LinqNode WhereCondition { get; set; }
+
+        public string LambdaParam { get; set; } = "x";
+
+        public override string ToCodeString() {
+
+            var setProps = string.Join("\n", Assignments.Select(a => BuildSetProperty(a.ColumnName, a.Value)));
+
+            string executeUpdate = $"ExecuteUpdateAsync(s => s\n{setProps})";
+
+            if (WhereCondition != null) {
+                return $"db.{SourceTable}.Where({LambdaParam} => {WhereCondition.ToCodeString()}).{executeUpdate}";
+            }
+
+            return $"db.{SourceTable}.{executeUpdate}";
+        }
+
+        private string BuildSetProperty(string columnName, LinqNode value) {
+
+            string colLambda = $"{LambdaParam} => {LambdaParam}.{columnName}";
+
+            if (value is LinqConstantNode { Value: null }) {
+                return $".SetProperty({colLambda}, x => null)";
+            }
+
+            if (ReferencesColumn(value)) {
+                return $".SetProperty({colLambda}, {LambdaParam} => {value.ToCodeString()})";
+            }
+
+            return $".SetProperty({colLambda}, {value.ToCodeString()})";
+        }
+
+        // Returns true if the node contains any column reference
+        // (identifier or qualified column), meaning it depends on the current row.
+
+        private static bool ReferencesColumn(LinqNode node) {
+
+            return node switch {
+                LinqIdentifierNode => true,
+                LinqBinaryExpressionNode b => ReferencesColumn(b.Left) || ReferencesColumn(b.Right),
+                LinqUnaryExpressionNode u => ReferencesColumn(u.Operand),
+                LinqParensNode p => ReferencesColumn(p.InnerNode),
+                LinqCaseNode c => c.WhenClauses.Any(w =>
+                                                 ReferencesColumn(w.Condition) ||
+                                                 ReferencesColumn(w.Result)) ||
+                                             (c.ElseExpression != null && ReferencesColumn(c.ElseExpression)) ||
+                                             (c.Operand != null && ReferencesColumn(c.Operand)),
+                _ => false
+            };
+        }
+    }
+
     public class LinqInsertNode : LinqNode {
 
         public string SourceTable { get; set; }

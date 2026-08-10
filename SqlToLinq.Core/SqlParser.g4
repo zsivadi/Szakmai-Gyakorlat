@@ -3,6 +3,7 @@ grammar SqlParser;
 query : selectQuery SEMICOLON? EOF
       | deleteStmt  SEMICOLON? EOF
       | insertStmt  SEMICOLON? EOF
+      | updateStmt  SEMICOLON? EOF
       ;
 
 selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
