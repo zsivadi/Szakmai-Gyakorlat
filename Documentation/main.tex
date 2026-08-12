@@ -51,11 +51,13 @@ A modern szoftverrendszerek jelentős része valamilyen adatbázis-kezelő rends
 
 A modern programozási környezetekben azonban gyakran szükség van arra, hogy az adatbázis-lekérdezések szorosan illeszkedjenek az alkalmazás forráskódjához. Erre a problémára különböző programozási nyelvek eltérő megoldásokat kínálnak. A Java környezetben például a Stream API biztosít lehetőséget kollekciók deklaratív feldolgozására, míg a funkcionális programozási nyelvekben, mint például a Scala vagy a Kotlin, a beépített kollekcióműveletek hasonló szemléletet követnek. Ezek a megoldások lehetővé teszik az adatok feldolgozásának kifejezését deklaratív módon.
 
-A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely a lekérdezési lehetőségeket közvetlenül a programozási nyelv szintaxisába integrálja. A LINQ lehetővé teszi, hogy a fejlesztők egységes módon kezeljék a különböző adatforrásokból származó adatokat, legyen szó objektumgyűjteményekről, adatbázisokról vagy XML dokumentumokról. Ennek köszönhetően az alkalmazás üzleti logikája és az adatlekérdezések ugyanabban a programozási környezetben valósíthatók meg \cite{skeet2019csharp,freeman2010prolinq}.
+A .NET környezetben erre a problémára kínál megoldást a Language INtegrated Query (LINQ), amely a lekérdezési lehetőségeket közvetlenül a programozási nyelv szintaxisába integrálja. A LINQ lehetővé teszi, hogy a fejlesztők egységes módon kezeljék a különböző adatforrásokból származó adatokat, legyen szó objektumgyűjteményekről, adatbázisokról vagy XML dokumentumokról. Ennek köszönhetően az alkalmazás üzleti logikája és az adatlekérdezések ugyanabban a programozási környezetben valósíthatók meg \cite{skeet2019csharp,freeman2010prolinq}. A .NET ökoszisztémában az Entity Framework Core az egyik legelterjedtebb ORM keretrendszer, amely a LINQ lekérdezéseket közvetlenül SQL utasításokká fordítja, így a fordító célplatformjaként kézenfekvő választásnak bizonyult.
 
 A különböző megközelítések közül jelen dokumentáció a LINQ alapú lekérdezések feldolgozásával és generálásával foglalkozik, mivel a .NET ökoszisztémában széles körben alkalmazott megoldást jelent, valamint jól vizsgálható rajta keresztül az SQL és a magasabb szintű programozási nyelvek közötti leképezés problémaköre.
 
 A dokumentáció egy olyan fordító (transpiler) tervezését és megvalósítását mutatja be, amely SQL lekérdezések automatikus LINQ kifejezésekké alakítására képes \cite{nmorph2023}. A projekt célja annak vizsgálata, hogy milyen módon valósítható meg egy ilyen fordító, milyen korlátok merülnek fel az SQL és LINQ közötti leképezés során, valamint milyen architekturális megoldások szükségesek egy ilyen rendszer létrehozásához.
+
+Nagy nyelvi modellek (LLM) szintén képesek SQL lekérdezéseket LINQ kóddá alakítani, azonban ez a folyamat statisztikai alapú. Ugyanarra a bemenetre eltérő kimenet keletkezhet, a helyesség nem garantált, és az eredmény nem integrálható automatizált pipeline-ba. Egy determinisztikus, formálisan definiált grammatikán alapuló fordító ezzel szemben verifikálható, reprodukálható és programozottan hívható. Ezt a megközelítést vizsgálja a jelen munka.
 
 A megvalósítás során külön figyelmet kap a lekérdezések feldolgozásának folyamata, az absztrakt szintaxisfa (Abstract Syntax Tree) alapú reprezentáció kialakítása, valamint a generált LINQ kód előállítása \cite{parr2013antlr4}.
 
@@ -162,8 +164,6 @@ Az nMorph keretrendszer \cite{nmorph2023} egy transpiler-alapú megközelítést
 
 Borne \cite{borne2021transpiler} esettanulmánya egy valódi ipari transpiler megvalósítását mutatja be, amely egy Oracle PL/SQL kódbázist fordít PostgreSQL-re. A cikk részletezi a megközelítés architektúráját, és hangsúlyozza, hogy az automatizált kódfordítás soha nem lehet teljes körű, mivel bizonyos konstrukciók, amelyek az egyik rendszerben természetesek, a másikban nem fejezhetők ki közvetlenül. Ez a megfigyelés összhangban van a projekt során szerzett tapasztalatokkal, mivel a SQL nyelv egyes elemei, például a \texttt{FULL OUTER JOIN}, a közös táblakifejezések (CTE) és az ablakfüggvények (\texttt{ROW\_NUMBER}, \texttt{RANK}) nem rendelkeznek LINQ-ban olyan közvetlen megfelelővel, amely az Entity Framework Core által szerveroldali SQL-lekérdezéssé fordítható. Emiatt ezeknek a konstrukcióknak a támogatása a transpiler jelenlegi hatókörén kívül esik.
 
-
-
 \section{Megvalósítás}
 
 \subsection{A tervezési döntések háttere}
@@ -196,7 +196,9 @@ Ez az elrendezés teszi lehetővé hogy a kódgenerálás egyszerűen a csomópo
 
 A LINQ kód egy lánc alakú metódushívás-sorozat, amelynek sorrendje kötött. A fordítónak ezt a sorrendet be kell tartania. Az AST-alapú megközelítés ezt természetesen kezeli, mivel a \texttt{LinqQueryNode} a metódusokat egy rendezett listában tárolja, és a visitor réteg gondoskodik arról, hogy ezek a helyes sorrendben kerüljenek bele.
 
-\subsection{A visitor és a scope kezelés}
+\subsection{A SELECT fordítása}
+
+\subsubsection{A visitor és a scope kezelés}
 
 A parse fa bejárására az ANTLR4 visitor mintáját alkalmazom. Az ANTLR4 a grammatikából automatikusan generálja az alap visitor interfészt, amelyet a \texttt{SqlVisitor} osztály implementál. Minden grammatikai szabályhoz egy \texttt{Visit...} metódus tartozik, amely a megfelelő \texttt{LinqNode} leszármazottat építi fel és adja vissza.
 
@@ -221,7 +223,7 @@ A \texttt{GROUP BY} kontextus kezelése szintén különleges figyelmet igényel
 
 A kód olvashatóságának és karbantarthatóságának javítása érdekében a fejlesztés során több ismétlődő minta kiszervezésre került újrafelhasználható segédmetódusokba. A \texttt{BuildWhereMethod} metódus elvégzi a \texttt{\_inWhereClause} flag beállítását, a feltétel látogatását és a \texttt{LinqMethodCallNode} összerakását. Hasonlóan, a \texttt{BuildOrderByMethods} az \texttt{ORDER BY} záradék feldolgozását végzi, a \texttt{SetupTableScope} pedig a tábla-alias leképezés és a scope verem feltöltését. Ezek a segédmetódusok egységes belépési pontot biztosítanak, és lehetővé teszik, hogy a \texttt{DELETE} és az \texttt{UPDATE} utasítások is ugyanazokat a WHERE és ORDER BY generálási logikákat használják, amelyek a \texttt{SELECT} esetén implementálva lettek.
 
-\subsection{Kódgenerálás}
+\subsubsection{Kódgenerálás}
 
 A kódgenerálás a visitor által felépített AST-csomópontok \texttt{ToCodeString()} metódusainak rekurzív meghívásával valósul meg. A folyamat kiindulópontja mindig a gyökér \texttt{LinqQueryNode}, amelynek \texttt{ToCodeString()} metódusa a forrástábla nevével kezdi az eredményt (\texttt{db.Tabla}), majd sorban hozzáfűzi a \texttt{Methods} lista elemeinek string reprezentációját.
 
@@ -233,7 +235,7 @@ A \texttt{CASE WHEN} kifejezések beágyazott ternáris operátorokká alakulnak
 
 A függvényleképezés a \texttt{LinqStringFunctionNode} osztályban egy \texttt{switch} kifejezéssel valósul meg. A matematikai függvények a \texttt{Math} osztály statikus metódusaira képződnek le, a stringfüggvények a \texttt{string} típus metódusaira, a dátumfüggvények pedig a \texttt{DateTime} struktúra property-jeire és metódusaira. Az ismeretlen függvénynevek esetén a \texttt{switch} alapértelmezett ága \texttt{NotSupportedException}-t dob, amely a fordítási folyamat során derül ki, nem futásidőben.
 
-\subsection{Főbb kihívások}
+\subsubsection{Főbb kihívások}
 
 A fejlesztés során több olyan pont adódott, ahol az első megközelítés tévesnek bizonyult és gondos átgondolást igényelt.
 
@@ -258,7 +260,115 @@ db.Users.Where(u => u.Role == "Admin")
 \caption{Nullable típusillesztési probléma és megoldása}
 \end{listing}
 
-\section{Tesztelés} 
+\subsection{A DELETE fordítása}
+
+A \texttt{DELETE} utasítás fordítása az EF Core 8.0-ban bevezetett \texttt{ExecuteDeleteAsync()} metódusra épül. Ez a metódus közvetlenül az adatbázison hajt végre törlési műveletet, megkerülve az EF Core change trackert, ami azt jelenti, hogy nem szükséges az érintett entitásokat előbb a memóriába tölteni, majd törölni.
+
+A fordítás alapesete a WHERE feltétel nélküli törlés, ahol a teljes tábla tartalma törlésre kerül.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// SQL: DELETE FROM Users
+// Generált LINQ:
+db.Users.ExecuteDeleteAsync()
+\end{minted}
+\caption{DELETE WHERE feltétel nélkül}
+\end{listing}
+
+WHERE feltétel esetén a lánc egy \texttt{Where()} hívással egészül ki, amelybe a feltétel ugyanazzal a scope-kezelési mechanizmussal kerül, mint a \texttt{SELECT} esetén. Ez lehetővé teszi, hogy korrelált allekérdezések is megjelenjenek a \texttt{DELETE} feltételében.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// SQL: DELETE FROM Users WHERE EXISTS
+//        (SELECT 1 FROM Orders o WHERE o.Owner = Users.Id)
+// Generált LINQ:
+db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any())
+        .ExecuteDeleteAsync()
+\end{minted}
+\caption{DELETE korrelált allekérdezéssel}
+\end{listing}
+
+A \texttt{DELETE} implementációja a \texttt{SetupTableScope} és \texttt{BuildWhereMethod} segédmetódusokat újrahasználja, amelyek a \texttt{SELECT} feldolgozásához készültek. Ez jól szemlélteti a háromrétegű architektúra előnyét, mivel az új utasítástípus bevezetésekor a WHERE-kezelési logikát nem kellett újraírni.
+
+\subsection{Az INSERT fordítása}
+
+Az \texttt{INSERT} utasítás két alakban támogatott. Az első a \texttt{VALUES} alapú beszúrás, a második az \texttt{INSERT INTO ... SELECT} alak, amely egy lekérdezés eredményét szúrja be a céltáblába.
+
+\subsubsection{VALUES alapú INSERT}
+
+Egyetlen sor beszúrásakor az \texttt{Add()} metódus generálódik, több sor esetén az \texttt{AddRange()} egy \texttt{List<T>} példánnyal. Mindkét esetben a generált kód egy \texttt{SaveChanges()} hívással zárul, amely az EF Core change trackeren keresztül véglegesíti a változásokat.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// SQL: INSERT INTO Users (Name, Age, Role) VALUES ('Bob', 25, 'Admin')
+// Generált LINQ:
+db.Users.Add(new Users { Name = "Bob", Age = 25, Role = "Admin" });
+db.SaveChanges();
+
+// SQL: INSERT INTO Users (Name, Age) VALUES ('Bob', 25), ('Alice', 19)
+// Generált LINQ:
+db.Users.AddRange(new List<Users>
+{
+    new Users { Name = "Bob", Age = 25 },
+    new Users { Name = "Alice", Age = 19 }
+});
+db.SaveChanges();
+\end{minted}
+\caption{VALUES alapú INSERT fordítása}
+\end{listing}
+
+A \texttt{NULL} értékek kezelése egyszerű, a generált kódban a \texttt{null} kulcsszó jelenik meg az adott property értékeként, ami az EF Core számára egyértelműen adatbázis-szintű \texttt{NULL}-t jelent.
+
+\subsubsection{INSERT INTO ... SELECT}
+
+Ez az alak egy meglévő lekérdezés eredményét szúrja be a céltáblába. A fordítás során a SELECT lekérdezés AST-ja a \texttt{LinqInsertSelectNode}-ba kerül, amely a kódgeneráláskor a SELECT projekciót újraírja a céltábla típusára mutató inicializátorrá.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// SQL: INSERT INTO Orders (Owner, Item, Qty)
+//      SELECT Id, 'Default', 0 FROM Users WHERE Role = 'Admin'
+// Generált LINQ:
+db.Orders.AddRange(
+    (db.Users.Where(x => x.Role == "Admin"))
+        .Select(x => new Orders { Owner = x.Id, Item = "Default", Qty = 0 })
+        .ToList()
+);
+db.SaveChanges();
+\end{minted}
+\caption{INSERT INTO ... SELECT fordítása}
+\end{listing}
+
+A projekció újraírása AST szinten történik, nem szövegmanipulációval. A \texttt{LinqInsertSelectNode} a SELECT lánc végéről eltávolítja a névtelen objektumot előállító \texttt{Select()} hívást, és helyette egy typed inicializátort generál, amelynek property-jei az INSERT oszloplistájából, értékei pedig a SELECT projekció kifejezéseiből származnak. Ez biztosítja, hogy literálok (\texttt{'Default'}), konstansok (\texttt{0}) és oszlophivatkozások (\texttt{x.Id}) egyaránt helyesen kerüljenek be a generált kódba.
+
+\subsection{Az UPDATE fordítása}
+
+Az \texttt{UPDATE} utasítás fordítása az EF Core 8.0-ban bevezetett \texttt{ExecuteUpdateAsync()} metódusra épül, amely a \texttt{ExecuteDeleteAsync()}-hoz hasonlóan közvetlenül az adatbázison hajt végre módosítást, a change tracker megkerülésével.
+
+A \texttt{SET} záradék minden egyes értékadásából egy \texttt{.SetProperty()} hívás keletkezik, amelyek láncoltan kapcsolódnak egymáshoz. A \texttt{SetProperty()} két paramétert vár: az első egy lambda, amely azonosítja a módosítandó oszlopot, a második pedig az új értéket adja meg.
+
+Az új érték megadásának alakja attól függ, hogy a jobb oldal tartalmaz-e oszlophivatkozást. Ha az értékadás jobb oldala kizárólag konstans (például \texttt{SET Role = 'Admin'}), a második argumentum direkt értékként jelenik meg. Ha azonban a jobb oldal hivatkozik az aktuális sorra (például \texttt{SET Points = Points + 10}), a második argumentum szintén lambda alakot ölt, amelynek törzsében az oszlophivatkozás a lambda paraméterével prefixelve szerepel.
+
+\begin{listing}[H]
+\begin{minted}{csharp}
+// SQL: UPDATE Users SET Role = 'Admin' WHERE Age > 30
+// Generált LINQ:
+db.Users.Where(x => x.Age > 30).ExecuteUpdateAsync(s => s
+    .SetProperty(x => x.Role, "Admin"))
+
+// SQL: UPDATE Users SET Points = Points + 10, Bonus = 0 WHERE Role = 'User'
+// Generált LINQ:
+db.Users.Where(x => x.Role == "User").ExecuteUpdateAsync(s => s
+    .SetProperty(x => x.Points, x => x.Points + 10)
+    .SetProperty(x => x.Bonus, 0))
+\end{minted}
+\caption{UPDATE fordítása konstans és kifejezés értékkel}
+\end{listing}
+
+A \texttt{NULL} értékre való frissítés külön kezelést igényel. A \texttt{SetProperty(x => x.Bonus, null)} alak fordítási hibát okozna, mivel a fordítóprogram nem tudja inferálni a \texttt{null} típusát. A megoldás lambda alak alkalmazása: \texttt{SetProperty(x => x.Bonus, x => null)}, ahol az EF Core a bal oldali lambda visszatérési típusából (\texttt{int?}) következteti ki a \texttt{null} típusát.
+
+A \texttt{SET} kifejezések látogatása ugyanazzal a \texttt{\_inWhereClause} flag mechanizmussal történik, mint a WHERE feltételeknél, így az oszlophivatkozások (\texttt{Points}, \texttt{Role}) helyesen kapják meg az \texttt{x.} prefixet a generált kódban.
+
+\section{Tesztelés}
 
 \section{Összegzés}
 
