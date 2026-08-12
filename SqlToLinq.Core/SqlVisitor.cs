@@ -1063,7 +1063,6 @@ namespace SqlToLinq.Core {
 
                 // String — 2 args
 
-                { "COALESCE",   2 },
                 { "NULLIF",     2 },
                 { "CONCAT",     2 },
                 { "CHARINDEX",  2 },
@@ -1348,6 +1347,28 @@ namespace SqlToLinq.Core {
             }
 
             return caseNode;
+        }
+
+        public override LinqNode VisitCastExpr([NotNull] SqlParserParser.CastExprContext context) {
+
+            LinqNode inner = Visit(context.expr());
+            string typeName = context.castType().IDENTIFIER().GetText().ToUpperInvariant();
+
+            string csType = typeName switch {
+                "INT" or "INTEGER" => "int",
+                "BIGINT" => "long",
+                "FLOAT" or "REAL" => "double",
+                "DECIMAL" or "NUMERIC" => "decimal",
+                "VARCHAR" or "NVARCHAR" or "CHAR" or "TEXT" or "STRING" => "string",
+                "BIT" or "BOOLEAN" => "bool",
+                "DATE" or "DATETIME" or "TIMESTAMP" => "DateTime",
+                _ => throw new NotSupportedException($"[ERROR] Unsupported CAST target type: {typeName}")
+            };
+
+            return new LinqCastNode {
+                Operand = inner,
+                CastType = csType
+            };
         }
 
         // AND condition processing, converting to C# "&&" operator

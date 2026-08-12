@@ -314,7 +314,10 @@ namespace SqlToLinq.Core {
                 "STR" => $"({arg0}).ToString()",
                 "FORMAT" => $"({arg0})!.ToString({arg1})",
 
-                "COALESCE" => $"({arg0} ?? {arg1})",
+                "COALESCE" => Arguments.Count == 2
+                        ? $"({arg0} ?? {arg1})"
+                        : $"({string.Join(" ?? ", Arguments.Select(a => a.ToCodeString()))})",
+
                 "ISNULL" => $"({arg0} ?? {arg1})",
                 "NVL" => $"({arg0} ?? {arg1})",
                 "NULLIF" => $"({arg0} == {arg1} ? null : {arg0})",
@@ -474,6 +477,14 @@ namespace SqlToLinq.Core {
 
             return $"({result})";
         }
+    }
+
+    public class LinqCastNode : LinqNode {
+        public LinqNode Operand { get; set; }
+        public string CastType { get; set; }
+
+        public override string ToCodeString() =>
+            $"({CastType})({Operand.ToCodeString()})";
     }
 
     public class LinqSubqueryNode : LinqNode {

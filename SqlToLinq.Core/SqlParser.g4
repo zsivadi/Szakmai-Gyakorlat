@@ -104,6 +104,7 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | CURRENT_TIMESTAMP                                        # currentTimestampExpr
      | TRUE_TOKEN                                               # trueExpr
      | FALSE_TOKEN                                              # falseExpr
+     | CAST '(' expr AS castType ')'                            # castExpr
      | caseExpr                                                 # caseExprAlt
      | subquery                                                 # scalarSubqueryExpr
      | '(' expr ')'                                             # parenExpr
@@ -114,6 +115,8 @@ expr : left=expr op=mathOp right=expr                           # mathExpr
      | STRING_LITERAL                                           # stringExpr
      | NULL_TOKEN                                               # nullExpr
      ;
+
+castType : IDENTIFIER ;
 
 caseExpr : CASE caseOperand=expr? (WHEN condition THEN expr)+ (ELSE elseExpr=expr)? END ;
 
@@ -173,6 +176,7 @@ EXCEPT		: [Ee][Xx][Cc][Ee][Pp][Tt] ;
 IN      	: [Ii][Nn] ;
 IS      	: [Ii][Ss] ;
 NULL_TOKEN 	: [Nn][Uu][Ll][Ll] ;
+CAST        : [Cc][Aa][Ss][Tt] ;
 
 
 
