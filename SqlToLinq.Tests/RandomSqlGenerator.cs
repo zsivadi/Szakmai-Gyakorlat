@@ -114,7 +114,7 @@ namespace SqlToLinq.Tests {
                         .Where(c => !c.StartsWith("CASE")
                                     && !c.Contains("(")
                                     && !c.Contains(")")
-                                    && !c.All(char.IsDigit))  
+                                    && !c.All(char.IsDigit))
                         .ToArray();
 
                     if (selectCols.Length > 0) orderCol = Pick(selectCols);
@@ -400,6 +400,109 @@ namespace SqlToLinq.Tests {
 
         private IEnumerable<string> RandomSubset(IEnumerable<string> items) =>
             RandomSubset(items.ToArray());
+
+        public string NextDelete() {
+
+            _activeTables = new[] { Chain[0] };
+
+            var sql = new StringBuilder("DELETE FROM Users");
+
+            if (_rng.Next(2) == 0) {
+                sql.Append($" WHERE {RandomCondition(depth: 0)}");
+            }
+
+            return sql.ToString() + ";";
+        }
+
+        public string NextInsert() {
+
+            _activeTables = new[] { Chain[0] };
+
+            var columns = new List<string>();
+            var values = new List<string>();
+
+            string[] stringCols = { "Name", "Role" };
+            string[] numericCols = { "Age", "Points", "Bonus" };
+
+            foreach (var col in stringCols) {
+                if (_rng.Next(2) == 0) {
+
+                    columns.Add(col);
+                    values.Add($"'{Pick(StringValues)}'");
+                }
+            }
+
+            foreach (var col in numericCols) {
+                if (_rng.Next(2) == 0) {
+
+                    columns.Add(col);
+                    bool useNull = _rng.Next(5) == 0;
+                    values.Add(useNull ? "NULL" : Pick(NumericValues));
+                }
+            }
+
+            if (columns.Count == 0) {
+                columns.Add("Name");
+                values.Add($"'{Pick(StringValues)}'");
+            }
+
+            int rowCount = _rng.Next(3) == 0 ? _rng.Next(2, 4) : 1;
+
+            if (rowCount == 1) {
+                return $"INSERT INTO Users ({string.Join(", ", columns)}) VALUES ({string.Join(", ", values)});";
+            }
+
+            var rows = new List<string> { $"({string.Join(", ", values)})" };
+            for (int i = 1; i < rowCount; i++) {
+
+                var extraVals = columns.Select(col => {
+                    if (col == "Name" || col == "Role") return $"'{Pick(StringValues)}'";
+                    if (_rng.Next(5) == 0) return "NULL";
+                    return Pick(NumericValues);
+                }).ToList();
+
+                rows.Add($"({string.Join(", ", extraVals)})");
+            }
+
+            return $"INSERT INTO Users ({string.Join(", ", columns)}) VALUES {string.Join(", ", rows)};";
+        }
+
+        public string NextUpdate() {
+
+            _activeTables = new[] { Chain[0] };
+
+            var assignments = new List<string>();
+
+            if (_rng.Next(2) == 0) {
+                assignments.Add($"Role = '{Pick(RoleValues)}'");
+            }
+
+            if (_rng.Next(2) == 0) {
+
+                bool useExpr = _rng.Next(3) == 0;
+                string val = useExpr ? $"Points + {_rng.Next(1, 50)}" : Pick(NumericValues);
+                assignments.Add($"Points = {val}");
+            }
+
+            if (_rng.Next(2) == 0) {
+
+                bool useNull = _rng.Next(4) == 0;
+                string val = useNull ? "NULL" : Pick(NumericValues);
+                assignments.Add($"Bonus = {val}");
+            }
+
+            if (assignments.Count == 0) {
+                assignments.Add($"Role = '{Pick(RoleValues)}'");
+            }
+
+            var sql = new StringBuilder($"UPDATE Users SET {string.Join(", ", assignments)}");
+
+            if (_rng.Next(2) == 0) {
+                sql.Append($" WHERE {RandomCondition(depth: 0)}");
+            }
+
+            return sql.ToString() + ";";
+        }
 
         private string Pick(string[] items) => items[_rng.Next(items.Length)];
     }
