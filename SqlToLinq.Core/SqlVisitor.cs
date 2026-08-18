@@ -85,7 +85,7 @@ namespace SqlToLinq.Core {
 
             foreach (var assignment in context.setClause().assignment()) {
 
-                string colName = ToPascalCase(assignment.IDENTIFIER().GetText());
+                string colName = ToPascalCase(assignment.identifier().GetText());
 
                 _inWhereClause = true;
                 LinqNode valueNode = Visit(assignment.expr());
@@ -116,7 +116,7 @@ namespace SqlToLinq.Core {
 
             bool hasExplicitColumns = context.idList() != null;
             var columnNames = hasExplicitColumns
-                ? context.idList().IDENTIFIER().Select(id => ToPascalCase(id.GetText())).ToList()
+                ? context.idList().identifier().Select(id => ToPascalCase(id.GetText())).ToList()
                 : new List<string>();
 
             var rows = new List<List<(string ColumnName, LinqNode Value)>>();
@@ -149,7 +149,7 @@ namespace SqlToLinq.Core {
             string tableName = ToPascalCase(context.tableName().GetText());
 
             var columnNames = context.idList() != null
-                ? context.idList().IDENTIFIER().Select(id => ToPascalCase(id.GetText())).ToList()
+                ? context.idList().identifier().Select(id => ToPascalCase(id.GetText())).ToList()
                 : new List<string>();
 
             _outerScopes.Push((_tableAliases, _currentLambdaParam));
@@ -202,6 +202,15 @@ namespace SqlToLinq.Core {
 
             if (string.IsNullOrEmpty(input)) return input;
 
+            if ((input.StartsWith("\"") && input.EndsWith("\"")) ||
+                (input.StartsWith("`") && input.EndsWith("`"))) {
+                input = input.Substring(1, input.Length - 2);
+            } else if (input.StartsWith("[") && input.EndsWith("]")) {
+                input = input.Substring(1, input.Length - 2);
+            }
+
+            if (string.IsNullOrEmpty(input)) return input;
+
             bool isSnakeCase = input.Contains('_');
 
             if (isSnakeCase) {
@@ -235,7 +244,7 @@ namespace SqlToLinq.Core {
 
             return selectCtx.groupClause().groupItem()
                 .Select(item => {
-                    var ids = item.IDENTIFIER();
+                    var ids = item.identifier();
                     return ids.Length == 2
                         ? $"{ids[0].GetText()}.{ToPascalCase(ids[1].GetText())}"
                         : ToPascalCase(ids[0].GetText());
@@ -250,8 +259,8 @@ namespace SqlToLinq.Core {
             if (columnList == null || columnList.STAR() != null) return aliases;
 
             foreach (var item in columnList.selectItem()) {
-                if (item.IDENTIFIER() != null) {
-                    string alias = ToPascalCase(item.IDENTIFIER().GetText());
+                if (item.identifier() != null) {
+                    string alias = ToPascalCase(item.identifier().GetText());
                     if (item.expr() is SqlParserParser.ColumnExprContext colCtx) {
 
                         string original = ToPascalCase(colCtx.GetText());
@@ -410,7 +419,7 @@ namespace SqlToLinq.Core {
 
                 var selectedColumns = context.columnList().selectItem()
                     .Select(item => {
-                        if (item.IDENTIFIER() != null) return ToPascalCase(item.IDENTIFIER().GetText());
+                        if (item.identifier() != null) return ToPascalCase(item.identifier().GetText());
                         if (item.expr() is SqlParserParser.ColumnExprContext col) return ToPascalCase(col.GetText());
                         return null;
                     })
@@ -879,10 +888,10 @@ namespace SqlToLinq.Core {
             Dictionary<string, string> aliasAccessPrefix) {
 
             string LeftAlias() =>
-                cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq ? lq.IDENTIFIER(0).GetText() : null;
+                cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq ? lq.identifier(0).GetText() : null;
 
             string RightAlias() =>
-                cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq ? rq.IDENTIFIER(0).GetText() : null;
+                cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq ? rq.identifier(0).GetText() : null;
 
             string leftAlias = LeftAlias();
             string rightAlias = RightAlias();
@@ -914,10 +923,10 @@ namespace SqlToLinq.Core {
             string innerAlias) {
 
             string LeftAlias() =>
-                cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq ? lq.IDENTIFIER(0).GetText() : null;
+                cmpCtx.left is SqlParserParser.QualifiedColumnExprContext lq ? lq.identifier(0).GetText() : null;
 
             string RightAlias() =>
-                cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq ? rq.IDENTIFIER(0).GetText() : null;
+                cmpCtx.right is SqlParserParser.QualifiedColumnExprContext rq ? rq.identifier(0).GetText() : null;
 
             if (LeftAlias() == outerAlias && RightAlias() == innerAlias) {
                 return (Visit(cmpCtx.left), Visit(cmpCtx.right));
@@ -981,7 +990,7 @@ namespace SqlToLinq.Core {
 
                 var exprNode = Visit(item.expr());
 
-                string aliasName = item.IDENTIFIER() != null ? item.IDENTIFIER().GetText() : null;
+                string aliasName = item.identifier() != null ? item.identifier().GetText() : null;
 
                 if (aliasName == null && exprNode is LinqIdentifierNode idNode) {
                     string code = idNode.Name;
@@ -1352,7 +1361,7 @@ namespace SqlToLinq.Core {
         public override LinqNode VisitCastExpr([NotNull] SqlParserParser.CastExprContext context) {
 
             LinqNode inner = Visit(context.expr());
-            string typeName = context.castType().IDENTIFIER().GetText().ToUpperInvariant();
+            string typeName = context.castType().identifier().GetText().ToUpperInvariant();
 
             string csType = typeName switch {
                 "INT" or "INTEGER" => "int",
@@ -1412,8 +1421,8 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitQualifiedColumnExpr([NotNull] SqlParserParser.QualifiedColumnExprContext context) {
 
-            string tableAlias = context.IDENTIFIER(0).GetText();
-            string columnName = ToPascalCase(context.IDENTIFIER(1).GetText());
+            string tableAlias = context.identifier(0).GetText();
+            string columnName = ToPascalCase(context.identifier(1).GetText());
 
             if (_joinKeyAliasMap != null && _joinKeyAliasMap.TryGetValue(tableAlias, out var accessPrefix)) {
                 return new LinqIdentifierNode { Name = $"{accessPrefix}.{columnName}" };
@@ -1471,7 +1480,7 @@ namespace SqlToLinq.Core {
 
                         var groupKeys = selectCtx.groupClause().groupItem()
                             .Select(item => {
-                                var ids = item.IDENTIFIER();
+                                var ids = item.identifier();
                                 return ids.Length == 2
                                     ? ToPascalCase(ids[1].GetText())
                                     : ToPascalCase(ids[0].GetText());

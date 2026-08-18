@@ -195,4 +195,13 @@
     private async Task SwitchAstTab(string tab) {
         ActiveAstTab = tab;
     }
+	
+	protected override async Task OnInitializedAsync() {
+    await Task.Run(() => {
+        try {
+			SqlToLinqConverter.Convert("SELECT * FROM Users WHERE Age > 18");
+            SqlToLinqConverter.Convert("SELECT u.Name FROM Users u JOIN Orders o ON u.Id = o.Owner"); 
+		} catch { }
+    });
+	}
 }

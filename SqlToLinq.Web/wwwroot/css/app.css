@@ -21,30 +21,19 @@ body {
     font-family: 'Inter', system-ui, sans-serif;
     color: var(--text-primary);
     min-height: 100vh;
-    background: linear-gradient(-45deg, #1a1f35, #2d1b4e, #1a2a4a, #3d2570);
-    background-size: 400% 400%;
-    animation: gradientShift 12s ease infinite;
+    background-color: #1a1535;
+    background-image: 
+        radial-gradient(ellipse at 0% 0%, #2d1b4e 0%, transparent 50%),
+        radial-gradient(ellipse at 100% 0%, #1a2a4a 0%, transparent 50%),
+        radial-gradient(ellipse at 100% 100%, #3d2570 0%, transparent 50%),
+        radial-gradient(ellipse at 0% 100%, #1a1f35 0%, transparent 50%);
+    animation: meshShift 12s ease infinite;
 }
 
-@keyframes gradientShift {
-    0%   { background-position: 0% 50%; }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0,0,0,0.03) 2px,
-        rgba(0,0,0,0.03) 4px
-    );
-    pointer-events: none;
-    z-index: 0;
+@keyframes meshShift {
+    0%   { background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%; }
+    50%  { background-size: 120% 120%, 110% 110%, 130% 130%, 115% 115%; }
+    100% { background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%; }
 }
 
 .container {
