@@ -87,8 +87,8 @@ condition : '(' condition ')'                                       # parensCond
           | left=expr NOT? LIKE right=STRING_LITERAL                # likeCondition
           | left=expr NOT? BETWEEN low=expr AND high=expr           # betweenCondition
           | left=expr IS NOT? NULL_TOKEN                            # isNullCondition
-          | left=expr NOT? IN '(' exprList ')'                      # inCondition
           | left=expr NOT? IN subquery                              # inSubqueryCondition
+          | left=expr NOT? IN '(' exprList ')'                      # inCondition
           | NOT? EXISTS subquery                                    # existsCondition
           | NOT condition                                           # notCondition
           | left=condition AND right=condition                      # andCondition

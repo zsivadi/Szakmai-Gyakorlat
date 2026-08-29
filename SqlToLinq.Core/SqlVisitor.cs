@@ -31,6 +31,15 @@ namespace SqlToLinq.Core {
 
         private string _currentLambdaParam = "x";
 
+        private SqlParserParser.SelectQueryContext UnwrapSubquery(SqlParserParser.SubqueryContext ctx)
+        {
+            while (ctx.subquery() != null)
+            {
+                ctx = ctx.subquery();
+            }
+            return ctx.selectQuery();
+        }
+
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
 
             if (context.selectQuery() != null) {
@@ -1237,7 +1246,7 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitInSubqueryCondition([NotNull] SqlParserParser.InSubqueryConditionContext context) {
 
-            var innerNode = Visit(context.subquery().selectQuery());
+            var innerNode = Visit(UnwrapSubquery(context.subquery()));
             var subquery = new LinqSubqueryNode { Inner = innerNode, AsScalar = false };
 
             var inNode = new LinqInExpressionNode {
@@ -1256,7 +1265,7 @@ namespace SqlToLinq.Core {
 
         public override LinqNode VisitExistsCondition([NotNull] SqlParserParser.ExistsConditionContext context) {
 
-            var innerNode = Visit(context.subquery().selectQuery());
+            var innerNode = Visit(UnwrapSubquery(context.subquery()));
             var subquery = new LinqSubqueryNode { Inner = innerNode, AsScalar = false };
 
             return new LinqExistsNode {
@@ -1267,11 +1276,13 @@ namespace SqlToLinq.Core {
 
         // Scalar subquery in expr position:  (SELECT MAX(Points) FROM Users)
 
-        public override LinqNode VisitScalarSubqueryExpr([NotNull] SqlParserParser.ScalarSubqueryExprContext context) {
+        public override LinqNode VisitScalarSubqueryExpr([NotNull] SqlParserParser.ScalarSubqueryExprContext context)
+        {
 
-            var innerNode = Visit(context.subquery().selectQuery());
+            var innerNode = Visit(UnwrapSubquery(context.subquery()));
 
-            return new LinqSubqueryNode {
+            return new LinqSubqueryNode
+            {
                 Inner = innerNode,
                 AsScalar = true
             };

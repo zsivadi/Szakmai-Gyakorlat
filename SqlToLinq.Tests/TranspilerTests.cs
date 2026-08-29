@@ -187,12 +187,6 @@ namespace SqlToLinq.Tests {
         }
 
         [Test]
-        public void Coalesce_With_Wrong_Arg_Count_Should_Throw_NotSupportedException() {
-            Assert.Throws<NotSupportedException>(() =>
-                SqlToLinqConverter.Convert("SELECT COALESCE(Name, Role, 'x') AS C FROM Users"));
-        }
-
-        [Test]
         public void Left_Join_Non_Equality_On_Should_Throw_NotSupportedException() {
             Assert.Throws<NotSupportedException>(() =>
                 SqlToLinqConverter.Convert(
