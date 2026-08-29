@@ -1,9 +1,9 @@
 grammar SqlParser;
 
-query : selectQuery SEMICOLON? EOF
-      | deleteStmt  SEMICOLON? EOF
-      | insertStmt  SEMICOLON? EOF
-      | updateStmt  SEMICOLON? EOF
+query : selectQuery SEMICOLON* EOF
+      | deleteStmt  SEMICOLON* EOF
+      | insertStmt  SEMICOLON* EOF
+      | updateStmt  SEMICOLON* EOF
       ;
 
 selectQuery : selectStmt ((UNION ALL? | INTERSECT | EXCEPT) selectStmt)* ;
@@ -37,7 +37,9 @@ tableSource : tableRef            # tableRefSource
 
 tableRef : tableName (AS? alias)? ;
 
-subquery : '(' selectQuery ')' ;
+subquery : '(' selectQuery ')'
+         | '(' subquery ')'
+         ;
 
 joinClause : joinType? JOIN tableRef ON condition ;
 
