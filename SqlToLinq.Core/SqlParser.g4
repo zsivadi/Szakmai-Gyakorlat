@@ -41,6 +41,10 @@ subquery : '(' selectQuery ')'
          | '(' subquery ')'
          ;
 
+parenExprList : '(' exprList ')'
+              | '(' parenExprList ')'
+              ;
+
 joinClause : joinType? JOIN tableRef ON condition ;
 
 joinType : INNER | LEFT OUTER? | RIGHT OUTER? | CROSS ;
@@ -88,7 +92,7 @@ condition : '(' condition ')'                                       # parensCond
           | left=expr NOT? BETWEEN low=expr AND high=expr           # betweenCondition
           | left=expr IS NOT? NULL_TOKEN                            # isNullCondition
           | left=expr NOT? IN subquery                              # inSubqueryCondition
-          | left=expr NOT? IN '(' exprList ')'                      # inCondition
+          | left=expr NOT? IN parenExprList                         # inCondition
           | NOT? EXISTS subquery                                    # existsCondition
           | NOT condition                                           # notCondition
           | left=condition AND right=condition                      # andCondition

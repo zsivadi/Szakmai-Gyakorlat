@@ -40,6 +40,15 @@ namespace SqlToLinq.Core {
             return ctx.selectQuery();
         }
 
+        private SqlParserParser.ExprListContext UnwrapParenExprList(SqlParserParser.ParenExprListContext ctx)
+        {
+            while (ctx.parenExprList() != null)
+            {
+                ctx = ctx.parenExprList();
+            }
+            return ctx.exprList();
+        }
+
         public override LinqNode VisitQuery([NotNull] SqlParserParser.QueryContext context) {
 
             if (context.selectQuery() != null) {
@@ -1231,7 +1240,7 @@ namespace SqlToLinq.Core {
                 Target = Visit(context.left)
             };
 
-            foreach (var valueExpr in context.exprList().expr()) {
+            foreach (var valueExpr in UnwrapParenExprList(context.parenExprList()).expr()) {
                 inNode.Values.Add(Visit(valueExpr));
             }
 
