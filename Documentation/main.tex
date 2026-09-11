@@ -8,28 +8,36 @@
  
 \usepackage{graphicx}
 \usepackage{hyperref}
+\usepackage{url}
+\def\UrlBreaks{\do\/\do-\do_\do.\do@}
 \usepackage[hypcap=true]{caption}
-\usepackage{minted}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{xcolor}
 \usepackage[expansion=false]{microtype}
 \usepackage{tabularx}
 \usepackage{booktabs}
 \usepackage{longtable}
 
-\setminted[csharp]{
-  bgcolor=gray!8,
-  fontsize=\small,
+\lstdefinestyle{csharpstyle}{
+  language=[Sharp]C,
+  backgroundcolor=\color{gray!8},
+  basicstyle=\small\ttfamily,
   breaklines=true,
   frame=single,
   framesep=6pt,
-  style=tango,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{orange!80!black},
+  showstringspaces=false,
+  tabsize=4,
+  captionpos=b,
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ö}{{\"{o}}}1 {ő}{{\H{o}}}1 {ú}{{\'u}}1 {ü}{{\"{u}}}1 {ű}{{\H{u}}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ö}{{\"{O}}}1 {Ő}{{\H{O}}}1 {Ú}{{\'U}}1 {Ü}{{\"{U}}}1 {Ű}{{\H{U}}}1,
 }
-
-\renewcommand{\listingscaption}{Kódpélda}
-\makeatletter
-\AtBeginDocument{%
-  \renewcommand{\thelisting}{\arabic{listing}}%
-}
-\makeatother
+\lstset{style=csharpstyle}
+\renewcommand{\lstlistingname}{Kódpélda}
  
 \bibliographystyle{plain}
 
@@ -104,8 +112,8 @@ Ezen különbségek áthidalására a fejlesztők a múltban gyakran nyers SQL l
 
 A LINQ kétféle szintaxisban írható fel. Lekérdezési szintaxisban (\emph{query syntax}), amely az SQL-hez hasonló kulcsszavakat használ, és metódusszintaxisban (\emph{method syntax}), amely láncolt metódushívásokból áll. A fordító az utóbbit generálja, mivel az programozottan könnyebben állítható elő. A lekérdezési lánc általános alakja:
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 db.Tabla
   .Where(x => feltétel)
   .GroupBy(x => x.Kulcs)
@@ -113,9 +121,9 @@ db.Tabla
   .Select(x => new { oszlopok })
   .Take(n)
   .ToList();
-\end{minted}
+\end{lstlisting}
 \caption{LINQ metódusszintaxis általános alakja}
-\end{listing}
+\end{figure}
  
 A lánc sorrendje nem tetszőleges, a LINQ kiértékelési szemantikája megköveteli, hogy a szűrés (\texttt{Where}) a vetítés (\texttt{Select}) előtt, a lapozás (\texttt{Take}/\texttt{Skip}) pedig az összes többi művelet után következzen. Ez tükrözi az SQL végrehajtási sorrendjét: 
 \texttt{FROM} $\to$ \texttt{WHERE} $\to$ \texttt{GROUP BY} $\to$ \texttt{HAVING} $\to$ \texttt{SELECT} $\to$ \texttt{DISTINCT} $\to$ \texttt{ORDER BY} $\to$ \texttt{LIMIT}.
@@ -174,6 +182,15 @@ A másik véglet egy teljes fordítóprogram-lánc lett volna saját lexerrel, p
 
 A kettő között egy háromrétegű architektúra bizonyult a legjobb megoldásnak. Az első réteg egy ANTLR4-gyel generált parser, amely az SQL szöveget parse fává alakítja. A második réteg egy saját absztrakt szintaxisfa, amely a LINQ-specifikus struktúrákat reprezentálja. A harmadik réteg a tényleges kódgenerátor, amely ebből az absztrakt reprezentációból állítja elő a végleges C\# forráskódot. Ez a szétválasztás több előnnyel is jár. A grammatika és a kódgenerálás egymástól függetlenül fejleszthető és tesztelhető. Új SQL konstrukciók bevezetésekor elegendő egy új grammar szabályt, egy új AST-csomópontot és egy új visitor metódust hozzáadni, a rendszer többi része változatlan marad.
 
+A fordítási folyamat lépéseit a \ref{fig:pipeline_forditas}. ábra szemlélteti.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{pipeline_transpile}
+    \caption{A fordítási pipeline lépései}
+    \label{fig:pipeline_forditas}
+\end{figure}
+
 \subsection{A grammatika és a parser}
 
 A parser előállítására az ANTLR4 parser generátor mellett döntöttem. Az ANTLR4 kontextusfüggetlen grammatikából automatikusan generál lexert és parsert, amelyek a bemeneti szöveget parse fává alakítják. A generált kód C\# nyelvű, így közvetlenül integrálható a .NET alapú projektbe.
@@ -184,6 +201,50 @@ A lexer a bemeneti karakterfolyamból tokeneket állít elő. A kulcsszavak eset
 
 A nyelvtan felépítése a legáltalánosabb szabályoktól halad a specifikusak felé. A legfelső szintű \texttt{query} szabály egy \texttt{selectQuery}-t vár, amelyet egy opcionális pontosvessző követhet. A \texttt{selectQuery} lehetőséget ad halmazműveletek láncolására (\texttt{UNION}, \texttt{INTERSECT}, \texttt{EXCEPT}), míg maga a \texttt{selectStmt} bontja ki az egyes lekérdezések szerkezetét. A \texttt{condition} szabály rekurzív, ami lehetővé teszi az \texttt{AND}, \texttt{OR} és \texttt{NOT} operátorok tetszőleges mélységű egymásba ágyazását. Az \texttt{expr} szabály szintén rekurzív, kezelve az aritmetikai kifejezéseket és a allekérdezéseket. Az ANTLR4 Adaptive~LL(*) algoritmusának köszönhetően ezek a rekurzív szabályok kezelhetők anélkül, hogy kézzel kellene foglalkozni a kétértelműségekkel.
 
+A főbb grammatikai szabályok railroad diagramjai a \ref{fig:rr_query}--\ref{fig:rr_caseexpr}. ábrákon láthatók.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{query}
+    \caption{A \texttt{query} szabály railroad diagramja}
+    \label{fig:rr_query}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{selectQuery}
+    \caption{A \texttt{selectQuery} szabály railroad diagramja}
+    \label{fig:rr_selectquery}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{selectStmt}
+    \caption{A \texttt{selectStmt} szabály railroad diagramja}
+    \label{fig:rr_selectstmt}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{condition}
+    \caption{A \texttt{condition} szabály railroad diagramja}
+    \label{fig:rr_condition}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{expr}
+    \caption{Az \texttt{expr} szabály railroad diagramja}
+    \label{fig:rr_expr}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{caseExpr}
+    \caption{A \texttt{caseExpr} szabály railroad diagramja}
+    \label{fig:rr_caseexpr}
+\end{figure}
+
 A többargumentumú függvényhívások kezelésére a grammatika egy variadikus szabályt alkalmaz. Az első változatban a két-, három- és négyargumentumú esetekre külön-külön szabályok léteztek, amit egy általánosabb \texttt{funcCallExpr} szabály váltott fel, amely \texttt{expr (COMMA expr)+} alakban írható le. Ez a változtatás egyszerűsítette a nyelvtant és lehetővé tette, hogy az argumentumszám-érvényesítés a visitor rétegbe kerüljön, ahol értelmes hibaüzenettel jelezhető, ha egy függvényt helytelen számú paraméterrel hívnak meg.
 
 \subsection{Az absztrakt szintaxisfa}
@@ -192,17 +253,17 @@ Az ANTLR4 által generált parse fa az SQL szintaxis közvetlen tükörképe, mi
 
 A csomóponthierarchia alapja az absztrakt \texttt{LinqNode} osztály, amelynek egyetlen absztrakt metódusa a \texttt{ToCodeString()}, ez felelős a C\# kód előállításáért. Minden konkrét csomóponttípus ebből öröklődik és saját implementációt ad ennek a metódusnak.
 
-A \texttt{LinqQueryNode} tárolja a forrástábla nevét és a metódushívások rendezett listáját, ez képviseli az egész lekérdezést. A \texttt{LinqMethodCallNode} egyetlen LINQ metódushívást ír le, névvel és argumentumlistával. \\A \texttt{LinqLambdaNode} egy lambda kifejezést tartalmaz paraméternévvel és törzzsel, és ez jelenik meg a \texttt{Where}, \texttt{Select}, \texttt{OrderBy} és hasonló metódusok belső kifejezéseként. \\A \texttt{LinqAnonymousObjectNode} egy névtelen C\# objektumot reprezentál, amelyet a többoszlopos \texttt{SELECT} vetítések állítanak elő. A \texttt{LinqJoinNode} a \texttt{JOIN} konstrukciót modellezi, tárolja a join típusát, a belső tábla nevét, valamint a bal és jobb oldali kulcskifejezést.
+A \texttt{LinqQueryNode} tárolja a forrástábla nevét és a metódushívások rendezett listáját, ez képviseli az egész lekérdezést. A \texttt{LinqMethodCallNode} egyetlen LINQ metódushívást ír le, névvel és argumentumlistával. \\A \texttt{LinqLambdaNode} egy lambda kifejezést tartalmaz paraméternévvel és \\törzzsel, és ez jelenik meg a \texttt{Where}, \texttt{Select}, \texttt{OrderBy} és hasonló metódusok belső kifejezéseként. \\A \texttt{LinqAnonymousObjectNode} egy névtelen C\# objektumot reprezentál, amelyet a többoszlopos \texttt{SELECT} vetítések állítanak elő. A \texttt{LinqJoinNode} a \texttt{JOIN} konstrukciót modellezi, tárolja a join típusát, a belső tábla nevét, valamint a bal és jobb oldali kulcskifejezést.
 
 A kifejezések szintjén a \texttt{LinqConstantNode} literális értékeket tárol, a \texttt{LinqIdentifierNode} azonosítókat és oszlophivatkozásokat, \\a \texttt{LinqBinaryExpressionNode} bináris kifejezéseket (aritmetika, összehasonlítás), a \texttt{LinqCaseNode} pedig a \texttt{CASE WHEN} szerkezetet modellezi, tárolja az opcionális operandust, a \texttt{WHEN} ágak listáját és az \texttt{ELSE} kifejezést.
 
 A DML utasítások saját gyökércsomópontokat kaptak. A \texttt{LinqDeleteNode} a törlési utasítást reprezentálja a forrástábla névvel, az opcionális \texttt{WHERE} feltétellel és a lambda paraméternévvel. A \texttt{LinqInsertNode} a \texttt{VALUES} alapú beszúrást tárolja, soronként tartalmazza az oszlopnév-érték párokat. A \texttt{LinqInsertSelectNode} az \texttt{INSERT INTO ... SELECT} alakot kezeli, tárolja a céltáblát, az oszloplistát és a teljes SELECT lekérdezés AST-ját, amelyből kódgeneráláskor a projekciót újra kell írni. A \texttt{LinqUpdateNode} az \texttt{UPDATE} utasítást modellezi a \texttt{SET} értékadások listájával, amelynek minden eleme egy \texttt{(ColumnName, LinqNode)} pár.
 
-Ez az elrendezés teszi lehetővé, hogy a kódgenerálás egyszerűen a csomópont-fa bejárásával valósuljon meg. Egy lekérdezés generálásához elegendő a gyökér \texttt{LinqQueryNode} \texttt{ToCodeString()} metódusát meghívni, amely rekurzívan meghívja a gyermek csomópontok ugyanezen metódusát, és az eredményeket összefűzi.
+Ez az elrendezés teszi lehetővé, hogy a kódgenerálás egyszerűen a \\csomópont-fa bejárásával valósuljon meg. Egy lekérdezés generálásához elegendő a gyökér \texttt{LinqQueryNode} \texttt{ToCodeString()} metódusát meghívni, amely rekurzívan meghívja a gyermek csomópontok ugyanezen metódusát, és az eredményeket összefűzi.
 
 A LINQ kód egy lánc alakú metódushívás-sorozat, amelynek sorrendje kötött. A fordítónak ezt a sorrendet be kell tartania. Az AST-alapú megközelítés ezt természetesen kezeli, mivel a \texttt{LinqQueryNode} a metódusokat egy rendezett listában tárolja, és a visitor réteg gondoskodik arról, hogy ezek a helyes sorrendben kerüljenek bele.
 
-Érdemes megfigyelni, hogy a két fa szerkezete lényegesen eltér egymástól. A parse fa szélességében nagy, egy egyszerű \texttt{SELECT Name FROM Users WHERE Age > 18} lekérdezésből több tucatnyi csomópontból álló fa keletkezik, amelynek levelein az egyes tokenek (a \texttt{SELECT} kulcsszó, az oszlopnév, a \texttt{FROM} kulcsszó, a táblanév stb.) találhatók. A LINQ AST ezzel szemben mélységében strukturált, ugyanebből a lekérdezésből egy \texttt{LinqQueryNode} keletkezik, amelynek \texttt{Methods} listájában egy \texttt{LinqMethodCallNode} (\texttt{Where}) és egy \texttt{LinqMethodCallNode} (\texttt{Select}) szerepel, és mindkettő egy-egy \texttt{LinqLambdaNode}-ot tartalmaz. Ez a szétválasztás teszi lehetővé, hogy a kódgenerálás triviálisan egyszerű legyen, mivel minden csomópont pontosan tudja, hogyan kell önmagát C\# kóddá alakítani.
+Érdemes megfigyelni, hogy a két fa szerkezete lényegesen eltér egymástól. A parse fa szélességében nagy, egy egyszerű \texttt{SELECT Name FROM Users WHERE Age > 18} lekérdezésből több tucatnyi csomópontból álló fa keletkezik, amelynek levelein az egyes tokenek (a \texttt{SELECT} kulcsszó, az oszlopnév, a \texttt{FROM} kulcsszó, a táblanév stb.) találhatók. A LINQ AST ezzel szemben mélységében strukturált, ugyanebből a lekérdezésből egy \texttt{LinqQueryNode} keletkezik, amelynek \texttt{Methods} listájában egy \texttt{LinqMethodCallNode} (\texttt{Where}) és egy \texttt{LinqMethodCallNode} (\texttt{Select}) szerepel, és mindkettő egy-egy \\\texttt{LinqLambdaNode}-ot tartalmaz. Ez a szétválasztás teszi lehetővé, hogy a kódgenerálás triviálisan egyszerű legyen, mivel minden csomópont pontosan tudja, hogyan kell önmagát C\# kóddá alakítani.
 
 \subsection{A SELECT fordítása}
 
@@ -212,8 +273,8 @@ A parse fa bejárására az ANTLR4 visitor mintáját alkalmazom. Az ANTLR4 a gr
 
 A visitor legösszetettebb része a scope kezelés, amelyre az SQL allekérdezések és korrelált hivatkozások miatt van szükség. Amikor egy belső \texttt{SELECT} lekérdezés hivatkozik a külső lekérdezés egy táblájára vagy aliasára, a fordítónak el kell döntenie, hogy az adott azonosítót melyik lambda paraméterrel kell prefixelni. Erre a célra az \texttt{\_outerScopes} nevű verem szolgál, amelybe minden \texttt{SELECT} feldolgozásának kezdetén bekerül az aktuális tábla-alias leképezés és az aktuális lambda paraméter neve. Amikor a belső lekérdezés egy azonosítót nem talál meg a saját scope-jában, végigmegy a veremen és megkeresi azt a külső scope-ban, majd az ott tárolt lambda paramétert használja prefixként.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // Korrelált EXISTS allekérdezés generálása
 // SQL: SELECT Name FROM Users u WHERE EXISTS 
 //        (SELECT 1 FROM Orders o WHERE o.Owner = u.Id)
@@ -221,13 +282,13 @@ A visitor legösszetettebb része a scope kezelés, amelyre az SQL allekérdezé
 db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any())
         .Select(x => new { x.Name })
         .ToList()
-\end{minted}
+\end{lstlisting}
 \caption{Korrelált allekérdezés scope kezelése}
-\end{listing}
+\end{figure}
 
 A lambda paraméter nevének nyomon követése nem triviális. Az egyszerű, alias nélküli lekérdezésekben a lambda paraméter mindig \texttt{x}. Ha azonban a lekérdezésben explicit SQL alias szerepel, például \texttt{FROM Orders o}, a belső lambda paraméter neve az alias lesz, tehát \texttt{o}. Ez biztosítja, hogy a generált kód olvasható maradjon, és a korrelált hivatkozások egyértelműen azonosíthatóak legyenek a generált LINQ-ban.
 
-A \texttt{GROUP BY} kontextus kezelése szintén különleges figyelmet igényel. A csoportosítás után a LINQ \texttt{Select} metódus lambda paraméterként a \texttt{g} csoportváltozót kapja, az oszlophivatkozások pedig \texttt{g.Key} vagy \texttt{g.First\-OrDefault().Oszlop} alakot öltenek. A visitor nyilvántartja, hogy éppen \texttt{GROUP BY} kontextusban dolgozik-e, és ennek megfelelően módosítja a generált kifejezéseket. Egy belső allekérdezés látogatásakor a kontextus flag-ek mentésre kerülnek, és a belső lekérdezés feldolgozása után visszaállítódnak, hogy a külső lekérdezés kontextusa ne sérüljön.
+A \texttt{GROUP BY} kontextus kezelése szintén különleges figyelmet igényel. A csoportosítás után a LINQ \texttt{Select} metódus lambda paraméterként a \texttt{g} csoportváltozót kapja, az oszlophivatkozások pedig \texttt{g.Key} vagy \\\texttt{g.First\-OrDefault().Oszlop} alakot öltenek. A visitor nyilvántartja, hogy éppen \texttt{GROUP BY} kontextusban dolgozik-e, és ennek megfelelően módosítja a generált kifejezéseket. Egy belső allekérdezés látogatásakor a kontextus flag-ek mentésre kerülnek, és a belső lekérdezés feldolgozása után visszaállítódnak, hogy a külső lekérdezés kontextusa ne sérüljön.
 
 A kód olvashatóságának és karbantarthatóságának javítása érdekében a fejlesztés során több ismétlődő minta kiszervezésre került újrafelhasználható segédmetódusokba. A \texttt{BuildWhereMethod} metódus elvégzi a \texttt{\_inWhereClause} flag beállítását, a feltétel látogatását és a \texttt{LinqMethodCallNode} összerakását. Hasonlóan, a \texttt{BuildOrderByMethods} az \texttt{ORDER BY} záradék feldolgozását végzi, a \texttt{SetupTableScope} pedig a tábla-alias leképezés és a scope verem feltöltését. Ezek a segédmetódusok egységes belépési pontot biztosítanak, és lehetővé teszik, hogy a \texttt{DELETE} és az \texttt{UPDATE} utasítások is ugyanazokat a WHERE és ORDER BY generálási logikákat használják, amelyek a \texttt{SELECT} esetén implementálva lettek.
 
@@ -255,8 +316,8 @@ A \texttt{GROUP BY} kontextusban megjelenő allekérdezések egy rejtettebb prob
 
 A nullable típusok kezelése az \texttt{IN (SELECT ...)} allekérdezéseknél szintén váratlan akadályt jelentett. Az első implementáció a belső lekérdezés által visszaadott szekvencián \texttt{Contains()} metódust hívott. Ez C\# szinten és SQLite esetén helyesen működött, de amikor az összehasonlítandó értékek egyike nullable típusú volt, az EF Core SQL Server és PostgreSQL providerein típusillesztési hiba keletkezett, mivel az \texttt{IQueryable<int>} nem tartalmaz \texttt{Contains(int?)} metódust. A megoldás az \texttt{Any()} metódusra való áttérés volt, amely explicit egyenlőség-összehasonlítást végez, és típusbiztos módon kezeli a nullable típusokat minden provideren.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // Korábbi, típusillesztési hibát okozó megközelítés:
 (db.Users.Where(u => u.Role == "Admin").Select(u => u.Id))
     .Contains(x.Owner)   // CS1929: IQueryable<int> nem tartalmazza ezt
@@ -264,41 +325,55 @@ A nullable típusok kezelése az \texttt{IN (SELECT ...)} allekérdezéseknél s
 // Javított, provider-független megközelítés:
 db.Users.Where(u => u.Role == "Admin")
         .Any(u => u.Id == x.Owner)
-\end{minted}
+\end{lstlisting}
 \caption{Nullable típusillesztési probléma és megoldása}
-\end{listing}
+\end{figure}
 
 \subsection{A DELETE fordítása}
 
-A \texttt{DELETE} utasítás fordítása az EF Core 8.0-ban bevezetett \texttt{ExecuteDeleteAsync()} metódusra épül. Ez a metódus közvetlenül az adatbázison hajt végre törlési műveletet, megkerülve az EF Core change trackert, ami azt jelenti, hogy nem szükséges az érintett entitásokat előbb a memóriába tölteni, majd törölni.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{deleteStmt}
+    \caption{A \texttt{deleteStmt} szabály railroad diagramja}
+    \label{fig:rr_deletestmt}
+\end{figure}
+
+A \texttt{DELETE} utasítás fordítása az EF Core 8.0-ban bevezetett \\\texttt{ExecuteDeleteAsync()} metódusra épül. Ez a metódus közvetlenül az adatbázison hajt végre törlési műveletet, megkerülve az EF Core change trackert, ami azt jelenti, hogy nem szükséges az érintett entitásokat előbb a memóriába tölteni, majd törölni.
 
 A fordítás alapesete a WHERE feltétel nélküli törlés, ahol a teljes tábla tartalma törlésre kerül.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // SQL: DELETE FROM Users
 // Generált LINQ:
 db.Users.ExecuteDeleteAsync()
-\end{minted}
+\end{lstlisting}
 \caption{DELETE WHERE feltétel nélkül}
-\end{listing}
+\end{figure}
 
 WHERE feltétel esetén a lánc egy \texttt{Where()} hívással egészül ki, amelybe a feltétel ugyanazzal a scope-kezelési mechanizmussal kerül, mint a \texttt{SELECT} esetén. Ez lehetővé teszi, hogy korrelált allekérdezések is megjelenjenek a \texttt{DELETE} feltételében.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // SQL: DELETE FROM Users WHERE EXISTS
 //        (SELECT 1 FROM Orders o WHERE o.Owner = Users.Id)
 // Generált LINQ:
 db.Users.Where(x => (db.Orders.Where(o => o.Owner == x.Id)).Any())
         .ExecuteDeleteAsync()
-\end{minted}
+\end{lstlisting}
 \caption{DELETE korrelált allekérdezéssel}
-\end{listing}
+\end{figure}
 
 A \texttt{DELETE} implementációja a \texttt{SetupTableScope} és \texttt{BuildWhereMethod} segédmetódusokat újrahasználja, amelyek a \texttt{SELECT} feldolgozásához készültek. Ez jól szemlélteti a háromrétegű architektúra előnyét, mivel az új utasítástípus bevezetésekor a WHERE-kezelési logikát nem kellett újraírni.
 
 \subsection{Az INSERT fordítása}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{insertStmt}
+    \caption{Az \texttt{insertStmt} szabály railroad diagramja}
+    \label{fig:rr_insertstmt}
+\end{figure}
 
 Az \texttt{INSERT} utasítás két alakban támogatott. Az első a \texttt{VALUES} alapú beszúrás, a második az \texttt{INSERT INTO ... SELECT} alak, amely egy lekérdezés eredményét szúrja be a céltáblába.
 
@@ -306,8 +381,8 @@ Az \texttt{INSERT} utasítás két alakban támogatott. Az első a \texttt{VALUE
 
 Egyetlen sor beszúrásakor az \texttt{Add()} metódus generálódik, több sor esetén az \texttt{AddRange()} egy \texttt{List<T>} példánnyal. Mindkét esetben a generált kód egy \texttt{SaveChanges()} hívással zárul, amely az EF Core change trackeren keresztül véglegesíti a változásokat.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // SQL: INSERT INTO Users (Name, Age, Role) VALUES ('Bob', 25, 'Admin')
 // Generált LINQ:
 db.Users.Add(new Users { Name = "Bob", Age = 25, Role = "Admin" });
@@ -321,9 +396,9 @@ db.Users.AddRange(new List<Users>
     new Users { Name = "Alice", Age = 19 }
 });
 db.SaveChanges();
-\end{minted}
+\end{lstlisting}
 \caption{VALUES alapú INSERT fordítása}
-\end{listing}
+\end{figure}
 
 A \texttt{NULL} értékek kezelése egyszerű, a generált kódban a \texttt{null} kulcsszó jelenik meg az adott property értékeként, ami az EF Core számára egyértelműen adatbázis-szintű \texttt{NULL}-t jelent.
 
@@ -331,8 +406,8 @@ A \texttt{NULL} értékek kezelése egyszerű, a generált kódban a \texttt{nul
 
 Ez az alak egy meglévő lekérdezés eredményét szúrja be a céltáblába. A fordítás során a SELECT lekérdezés AST-ja a \texttt{LinqInsertSelectNode}-ba kerül, amely a kódgeneráláskor a SELECT projekciót újraírja a céltábla típusára mutató inicializátorrá.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // SQL: INSERT INTO Orders (Owner, Item, Qty)
 //      SELECT Id, 'Default', 0 FROM Users WHERE Role = 'Admin'
 // Generált LINQ:
@@ -342,22 +417,29 @@ db.Orders.AddRange(
         .ToList()
 );
 db.SaveChanges();
-\end{minted}
+\end{lstlisting}
 \caption{INSERT INTO ... SELECT fordítása}
-\end{listing}
+\end{figure}
 
 A projekció újraírása AST szinten történik, nem szövegmanipulációval. A \texttt{LinqInsertSelectNode} a SELECT lánc végéről eltávolítja a névtelen objektumot előállító \texttt{Select()} hívást, és helyette egy typed inicializátort generál, amelynek property-jei az INSERT oszloplistájából, értékei pedig a SELECT projekció kifejezéseiből származnak. Ez biztosítja, hogy literálok (\texttt{'Default'}), konstansok (\texttt{0}) és oszlophivatkozások (\texttt{x.Id}) egyaránt helyesen kerüljenek be a generált kódba.
 
 \subsection{Az UPDATE fordítása}
 
-Az \texttt{UPDATE} utasítás fordítása az EF Core 8.0-ban bevezetett \texttt{ExecuteUpdateAsync()} metódusra épül, amely a \texttt{ExecuteDeleteAsync()}-hoz hasonlóan közvetlenül az adatbázison hajt végre módosítást, a change tracker megkerülésével.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{updateStmt}
+    \caption{Az \texttt{updateStmt} szabály railroad diagramja}
+    \label{fig:rr_updatestmt}
+\end{figure}
+
+Az \texttt{UPDATE} utasítás fordítása az EF Core 8.0-ban bevezetett \\\texttt{ExecuteUpdateAsync()} metódusra épül, amely a \texttt{ExecuteDeleteAsync()}-hoz hasonlóan közvetlenül az adatbázison hajt végre módosítást, a change tracker megkerülésével.
 
 A \texttt{SET} záradék minden egyes értékadásából egy \texttt{.SetProperty()} hívás keletkezik, amelyek láncoltan kapcsolódnak egymáshoz. A \texttt{SetProperty()} két paramétert vár: az első egy lambda, amely azonosítja a módosítandó oszlopot, a második pedig az új értéket adja meg.
 
 Az új érték megadásának alakja attól függ, hogy a jobb oldal tartalmaz-e oszlophivatkozást. Ha az értékadás jobb oldala kizárólag konstans (például \texttt{SET Role = 'Admin'}), a második argumentum direkt értékként jelenik meg. Ha azonban a jobb oldal hivatkozik az aktuális sorra (például \texttt{SET Points = Points + 10}), a második argumentum szintén lambda alakot ölt, amelynek törzsében az oszlophivatkozás a lambda paraméterével prefixelve szerepel.
 
-\begin{listing}[H]
-\begin{minted}{csharp}
+\begin{figure}[H]
+\begin{lstlisting}
 // SQL: UPDATE Users SET Role = 'Admin' WHERE Age > 30
 // Generált LINQ:
 db.Users.Where(x => x.Age > 30).ExecuteUpdateAsync(s => s
@@ -368,17 +450,24 @@ db.Users.Where(x => x.Age > 30).ExecuteUpdateAsync(s => s
 db.Users.Where(x => x.Role == "User").ExecuteUpdateAsync(s => s
     .SetProperty(x => x.Points, x => x.Points + 10)
     .SetProperty(x => x.Bonus, 0))
-\end{minted}
+\end{lstlisting}
 \caption{UPDATE fordítása konstans és kifejezés értékkel}
-\end{listing}
+\end{figure}
 
-A \texttt{NULL} értékre való frissítés külön kezelést igényel. A \texttt{SetProperty(x => x.Bonus, null)} alak fordítási hibát okozna, mivel a fordítóprogram nem tudja inferálni a \texttt{null} típusát. A megoldás lambda alak alkalmazása: \texttt{SetProperty(x => x.Bonus, x => null)}, ahol az EF Core a bal oldali lambda visszatérési típusából (\texttt{int?}) következteti ki a \texttt{null} típusát.
+A \texttt{NULL} értékre való frissítés külön kezelést igényel. A \texttt{SetProperty(x => x.Bonus, null)} alak fordítási hibát okozna, mivel a fordítóprogram nem tudja inferálni a \texttt{null} típusát. A megoldás lambda alak alkalmazása: \\\texttt{SetProperty(x => x.Bonus, x => null)}, ahol az EF Core a bal oldali lambda visszatérési típusából (\texttt{int?}) következteti ki a \texttt{null} típusát.
 
 A \texttt{SET} kifejezések látogatása ugyanazzal a \texttt{\_inWhereClause} flag mechanizmussal történik, mint a WHERE feltételeknél, így az oszlophivatkozások (\texttt{Points}, \texttt{Role}) helyesen kapják meg az \texttt{x.} prefixet a generált kódban.
 
 \section{Tesztelés}
 
-A fordító helyességének igazolása három egymást kiegészítő tesztelési szinten történik. Mindhárom szint más-más típusú hibát képes felderíteni, és együttesen lefedik a fordítás teljes folyamatát a szintaktikai elemzéstől a szemantikai egyenértékűségig.
+A fordító helyességének igazolása három egymást kiegészítő tesztelési szinten történik. Mindhárom szint más-más típusú hibát képes felderíteni, és együttesen lefedik a fordítás teljes folyamatát a szintaktikai elemzéstől a szemantikai egyenértékűségig. A tesztelési infrastruktúra felépítését a \ref{fig:pipeline_teszteles}. ábra mutatja.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{pipeline_testing}
+    \caption{A tesztelési pipeline felépítése}
+    \label{fig:pipeline_teszteles}
+\end{figure}
 
 \subsection{Transpiler tesztek}
 
@@ -396,7 +485,7 @@ A végrehajtás a Microsoft Roslyn fordítóplatform segítségével történik.
 
 Az adatbázis egy rögzített, ismételhető seed adatokkal van feltöltve. A seed adatok gondosan megtervezettek, minden táblában vannak olyan sorok, amelyek egymással join-kapcsolatban állnak, és olyanok is, amelyek nem, ez teszi lehetővé az outer join szemantika helyes ellenőrzését. Az eredmény-összehasonlítás sor szintű, az ORDER BY záradék nélküli lekérdezéseknél a sorok sorba rendezés után, rendezéssel rendelkezőknél eredeti sorrendben kerülnek összevetésre.
 
-Bizonyos teszteseteket ki kellett zárni ebből a szintből. Az SQLite in-memory provider nem tartalmaz minden SQL Server vagy PostgreSQL-specifikus függvényt, a \texttt{YEAR()}, \texttt{MONTH()}, \texttt{GETDATE()} és hasonló dátumfüggvények nem állnak rendelkezésre. Ezeket a teszteket egy explicit kizárási lista alapján az \texttt{Assert.Ignore()} hívással átugorja a rendszer, és a helyességüket a transpiler tesztek biztosítják.
+Bizonyos teszteseteket ki kellett zárni ebből a szintből. Az SQLite in-memory provider nem tartalmaz minden SQL Server vagy \\PostgreSQL-specifikus függvényt, a \texttt{YEAR()}, \texttt{MONTH()}, \texttt{GETDATE()} és hasonló dátumfüggvények nem állnak rendelkezésre. Ezeket a teszteket egy explicit kizárási lista alapján az \texttt{Assert.Ignore()} hívással átugorja a rendszer, és a helyességüket a transpiler tesztek biztosítják.
 
 A \texttt{DELETE}, \texttt{INSERT} és \texttt{UPDATE} utasítások szemantikai ellenőrzése külön \texttt{EfCoreEdgeCaseTests} osztályban történik. Ezek a tesztek ténylegesen módosítják az adatbázist, majd az EF Core \texttt{DbContext}-en keresztül ellenőrzi az adatbázis állapotát. Mivel a módosítások megváltoztatják a seed adatokat, minden teszt esetén a \texttt{[SetUp]} metódus újra feltölti az adatbázist. A \texttt{NULL} értékre való \texttt{UPDATE} esetén külön figyelmet igényel az EF Core type inference, mivel a \texttt{SetProperty(x => x.Col, null)} alak fordítási hibát okoz, mert a fordítóprogram nem tudja inferálni a \texttt{null} típusát, ezért a generált kód \texttt{SetProperty(x => x.Col, x => null)} alakot használ, ahol a bal oldali lambda visszatérési típusából az EF Core következteti ki a megfelelő nullable típust.
 
@@ -414,46 +503,50 @@ A \texttt{SemanticEquivalenceTests} osztály szintén tartalmaz egy fuzz alapú 
 
 \section{LLM összehasonlítás}
 
-A projekt egyik motivációja az volt, hogy a nagy nyelvi modellek (LLM) ugyan képesek SQL lekérdezéseket LINQ kóddá alakítani, de ez a folyamat statisztikai alapú, nem determinisztikus, és nem integrálható automatizált pipeline-ba. Ennek empirikus vizsgálatára egy mérést végeztem, amelyben két kereskedelmi LLM-et hasonlítottam össze a saját fordítóval ugyanazon a bemeneten.
+A projekt egyik motivációja az volt, hogy a nagy nyelvi modellek (LLM) ugyan képesek SQL lekérdezéseket LINQ kóddá alakítani, de ez a folyamat statisztikai alapú, nem determinisztikus, és nem integrálható automatizált pipeline-ba. Ennek empirikus vizsgálatára méréseket végeztem, amelyek során két kereskedelmi LLM-et hasonlítottam össze a saját fordítóval ugyanazon a bemeneten.
 
 \subsection{Módszertan}
 
-A mérés bemenete a projekt stressz tesztelésére összeállított komplex SQL lekérdezés, amely egyszerre tartalmaz háromtáblás JOIN-t, beágyazott \texttt{CASE WHEN} kifejezést, korrelált és nem korrelált allekérdezéseket, \texttt{EXISTS} és \texttt{NOT IN} feltételeket, szöveg- és dátumfüggvényeket, \texttt{COALESCE}-t, \texttt{CAST}-ot, valamint \texttt{ORDER BY}, \texttt{LIMIT} és \texttt{OFFSET} záradékokat.
+A mérés bemenete a projekt stressz tesztelésére összeállított komplex SQL lekérdezés, amely egyszerre tartalmaz háromtáblás JOIN-t, beágyazott \texttt{CASE WHEN} kifejezést, korrelált és nem korrelált allekérdezéseket, \texttt{EXISTS} és \texttt{NOT IN} feltételeket, szöveg- és dátumfüggvényeket, \texttt{COALESCE}-t, \texttt{CAST}-ot, valamint \texttt{ORDER BY}, \texttt{LIMIT} és \texttt{OFFSET} záradékokat. A lekérdezés szándékosan összetett, hogy megvizsgálja, hogyan birkóznak meg az LLM-ek a grammatikailag és szemantikailag bonyolult bemenetekkel.
 
-Minden modell ugyanazt a promptot kapta, amely kizárólag a LINQ kifejezést kérte vissza, magyarázat és formázás nélkül. A mérést mindkét modellnél 5 alkalommal ismételtem, és rögzítettem a válaszidőt, a kimenet tartalmát, valamint azt, hogy a különböző futtatások azonos kimenetet adtak-e.
+Minden modell ugyanazt a promptot kapta, amely kizárólag a LINQ kifejezést kérte vissza, magyarázat és formázás nélkül. A mérést mindkét modellnél 5 alkalommal végeztem el, és rögzítettem a válaszidőt, a kimenet tartalmát, valamint azt, hogy a különböző futtatások azonos kimenetet adtak-e.
 
-A két vizsgált LLM a Gemini 3.6 Flash (Google) és a GPT-OSS-120B (OpenAI, Groq infrastruktúrán futtatva) volt. A saját fordító mérési adatai a Blazor WebAssembly demóból származnak, ahol az első hívás utáni JIT warm-up időt nem vesszük figyelembe.
+A két vizsgált LLM a Gemini 3.6 Flash (Google) és a GPT-OSS-120B (OpenAI, Groq infrastruktúrán futtatva) volt. A saját fordító mérései egy fejlesztői gépen, lokálisan futtatva történtek, ahol az első hívás utáni JIT warm-up időt nem vettük figyelembe. Fontos megjegyezni, hogy a válaszidőn kívül az erőforrásfelhasználásban is nagyságrendi különbségek állnak fenn: az LLM-ek esetén nagyteljesítményű felhőinfrastruktúra fut a háttérben, míg a saját fordító egy átlagos fejlesztői gépen is ezredmásodpercek alatt elvégzi a feladatot.
+
+Az összehasonlítás alapját a generált kimenetek karakterszintű összevetése adja, kiegészítve strukturális elemzéssel. Karakterhelyes egyezés az LLM-ek esetén nem várható, mivel a modellek ugyanarra a bemenetre különböző, de esetleg szemantikailag egyenértékű kódot generálhatnak. Ezért a konzisztenciát nem karakterszintű azonosságként értelmezzük, hanem azt vizsgáljuk, hogy a különböző futtatások strukturálisan hasonló vagy eltérő megoldásokat adnak-e.
 
 \subsection{Eredmények}
 
 \begin{table}[h]
 \centering
-\caption{LLM összehasonlítás eredményei}
+\caption{LLM összehasonlítás eredményei (5 futtatás)}
 \label{tab:llm-comparison}
 \renewcommand{\arraystretch}{1.4}
 \small
-\begin{tabular}{|l|r|r|r|c|}
+\begin{tabular}{|l|r|r|r|r|c|}
 \hline
-\textbf{Modell} & \textbf{Átlag} & \textbf{Min} & \textbf{Max} & \textbf{Konzisztens} \\
+\textbf{Modell} & \textbf{Átlag} & \textbf{Min} & \textbf{Max} & \textbf{Szórás} & \textbf{Konzisztens} \\
 \hline
-Gemini 3.6 Flash      & 46,18 s & 17,43 s & 71,30 s & nem \\
-GPT-OSS-120B (Groq)   & 13,82 s &  3,43 s & 20,02 s & nem \\
-Saját fordító         &  $<$1 ms &  $<$1 ms &  $<$1 ms & igen \\
+Gemini 3.6 Flash      & 46,18 s & 17,43 s & 71,30 s & 22,1 s & nem \\
+GPT-OSS-120B (Groq)   & 13,82 s &  3,43 s & 20,02 s &  6,8 s & nem \\
+Saját fordító (lokális) & $<$1 ms &  $<$1 ms &  $<$1 ms & $\approx$0 & igen \\
 \hline
 \end{tabular}
 \end{table}
 
+A Gemini esetén a válaszidők szórása 22,1 másodperc, ami a minimális és maximális értékek közötti közel négyszeres különbséget tükröz. A Groq modellnél a szórás 6,8 másodperc, a legrövidebb és leghosszabb válasz között közel hatszoros eltérés mutatkozik. Ez a szórás önmagában is jelzi, hogy az LLM-ek válaszideje kiszámíthatatlan, ami automatizált pipeline-ban tervezési nehézséget jelent.
+
 \subsection{Megfigyelések}
 
-A válaszidő tekintetében a különbség több nagyságrendnyi. A Gemini átlagosan 46 másodpercet vett igénybe ugyanahhoz a lekérdezéshez, amelyet a saját fordító ezredmásodpercek alatt dolgoz fel. A Groq infrastruktúrán futó GPT-OSS-120B gyorsabbnak bizonyult, de a 13 másodperces átlag és a 20 másodperces maximum még mindig lényegesen több, mint ami egy automatizált pipeline-ban elfogadható lenne.
+A válaszidő tekintetében a különbség több nagyságrendnyi. A Gemini átlagosan 46 másodpercet vett igénybe ugyanahhoz a lekérdezéshez, amelyet a saját fordító ezredmásodpercek alatt dolgoz fel lokálisan. A Groq infrastruktúrán futó GPT-OSS-120B gyorsabbnak bizonyult, de a 13 másodperces átlag és a 20 másodperces maximum még mindig lényegesen több, mint ami egy automatizált pipeline-ban elfogadható lenne.
 
-A konzisztencia mindkét LLM esetén hiányzott. A Gemini 5 futtatásán 5 különböző kimenetet produkált. A Groq modell szintén eltérő megoldásokat adott futtatásonként. A saját fordító minden futtatáson azonos kimenetet állított elő.
+A konzisztencia mindkét LLM esetén hiányzott. A Gemini 5 futtatásán 5 strukturálisan különböző kimenetet produkált. A Groq modell szintén eltérő megoldásokat adott futtatásonként, emellett két futtatás üres választ, egy pedig csonka, félbeszakadt kimenetet adott vissza. A saját fordító mind az 5 futtatáson byte-szintűen azonos kimenetet állított elő.
 
-A kimenet helyességét vizsgálva szembetűnő strukturális hibák is megfigyelhetők. A Groq modell első válaszában a \texttt{WHERE} feltétel a \texttt{JOIN} műveletek elé kerül, ami az EF Core lekérdezési láncban szemantikailag helytelen sorrendet jelent. A DbContext elnevezése futtatásonként változott (\texttt{ctx}, \texttt{context}, \texttt{db}), és a \texttt{LIKE 'B\%'} operátor egyszer \texttt{EF.Functions.Like}-ra, másszor \texttt{StartsWith()}-re fordult. A saját fordító mindkét esetben provider-független, EF Core kompatibilis, determinisztikus kimenetet állít elő.
+A kimenet helyességét vizsgálva szembetűnő strukturális hibák is megfigyelhetők. A Groq modell első válaszában a \texttt{WHERE} feltétel a \texttt{JOIN} műveletek elé kerül, ami az EF Core lekérdezési láncban szemantikailag helytelen sorrendet jelent. A \texttt{DbContext} elnevezése futtatásonként változott (\texttt{ctx}, \texttt{context}, \texttt{db}), és a \texttt{LIKE 'B\%'} operátor egyszer \texttt{EF.Functions.Like}-ra, másszor \texttt{StartsWith()}-re fordult. A saját fordító mindkét esetben provider-független, EF Core kompatibilis, determinisztikus kimenetet állít elő.
 
 \subsection{Következtetések}
 
-Az LLM-ek interaktív segítségként hasznos eszközök lehetnek, ha egy fejlesztő egyszeri alkalommal szeretne egy SQL lekérdezést LINQ-ra fordítani és az eredményt manuálisan ellenőrzi. Automatizált migrációs pipeline-ban azonban, ahol több száz vagy több ezer lekérdezést kell feldolgozni, a válaszidő, a nem determinisztikus kimenet és az ellenőrizhetőség hiánya komoly akadályt jelent. A determinisztikus fordító ezzel szemben programozottan hívható, az eredménye verifikálható, és ugyanarra a bemenetre mindig ugyanazt adja.
+Az LLM-ek interaktív segítségként hasznos eszközök lehetnek, ha egy fejlesztő egyszeri alkalommal szeretne egy SQL lekérdezést LINQ-ra fordítani és az eredményt manuálisan ellenőrzi. Automatizált migrációs pipeline-ban azonban, ahol több száz vagy több ezer lekérdezést kell feldolgozni, a válaszidő, a nem determinisztikus kimenet, az ellenőrizhetőség hiánya és a felhőinfrastruktúra szükségessége komoly akadályt jelent. A determinisztikus fordító ezzel szemben programozottan hívható, az eredménye verifikálható, lokálisan futtatható, és ugyanarra a bemenetre mindig ugyanazt adja.
 
 \section{Összegzés}
 
@@ -461,7 +554,7 @@ A jelen munka egy SQL:1999 kompatibilis lekérdezéseket EF Core 8.0 LINQ metód
 
 Az első kérdésre a válasz a projekt hatókörén keresztül rajzolódott ki. A \texttt{SELECT} utasítás teljes egészében leképezhető: a \texttt{WHERE} feltételek, a \texttt{JOIN} műveletek, a \texttt{GROUP BY} aggregáció, a halmazműveletek, az allekérdezések és a \texttt{CASE WHEN} kifejezések mind rendelkeznek egyértelmű LINQ megfelelővel. A \texttt{DELETE}, \texttt{INSERT} és \texttt{UPDATE} utasítások szintén fordíthatók, bár az EF Core 8.0 bulk-műveletei (\texttt{ExecuteDeleteAsync}, \texttt{ExecuteUpdateAsync}) és a change tracker alapú műveletek (\texttt{Add}, \texttt{SaveChanges}) közötti különbség tudatos tervezési döntést igényelt. Bizonyos SQL konstrukciók viszont nem fordíthatók le megbízhatóan: a \texttt{FULL OUTER JOIN}, a közös táblakifejezések (CTE) és az ablakfüggvények nem rendelkeznek olyan LINQ megfelelővel, amelyet az EF Core minden provideren szerver oldalon SQL-re fordítana.
 
-A második kérdésre a háromrétegű architektúra adott választ. Az ANTLR4-alapú parser, a saját LINQ AST és a rekurzív kódgenerátor szétválasztása lehetővé tette, hogy minden réteg önállóan fejleszthető és tesztelhető legyen. Az AST réteg különösen fontos szerepet játszott, mivel a parse fa és a LINQ AST szerkezetének különbsége nem pusztán technikai részlet, hanem a fordítás lényege. Ahol a parse fa szélességében nagy és az SQL szintaxis minden elemét tartalmazza, a LINQ AST mélységében strukturált és csak azokat az információkat hordozza, amelyek a kódgeneráláshoz szükségesek.
+A második kérdésre a háromrétegű architektúra adott választ. Az \\ANTLR4-alapú parser, a saját LINQ AST és a rekurzív kódgenerátor szétválasztása lehetővé tette, hogy minden réteg önállóan fejleszthető és tesztelhető legyen. Az AST réteg különösen fontos szerepet játszott, mivel a parse fa és a LINQ AST szerkezetének különbsége nem pusztán technikai részlet, hanem a fordítás lényege. Ahol a parse fa szélességében nagy és az SQL szintaxis minden elemét tartalmazza, a LINQ AST mélységében strukturált és csak azokat az információkat hordozza, amelyek a kódgeneráláshoz szükségesek.
 
 A fejlesztés során felmerülő kihívások visszatérő mintát mutattak, az első, kézenfekvőnek tűnő megközelítés szinte minden esetben valamilyen szélső esetben megbukott. A \texttt{LIKE} operátor regex-alapú fordítása kliensoldalon ragadt, az \texttt{IN (SELECT ...)} \texttt{Contains()}-alapú implementációja nullable típusoknál típusillesztési hibát dobott, a scope kezelés első változata lambda névütközéseket okozott mélyen egymásba ágyazott allekérdezéseknél. Ezek a tapasztalatok rávilágítottak arra, hogy egy fordító helyessége nem igazolható pusztán a happy path eseteken végzett ellenőrzéssel, a regressziók megelőzése érdekében a tesztelési infrastruktúra legalább annyira fontos, mint maga a fordítási logika.
 
